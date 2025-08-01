@@ -1,0 +1,9 @@
+.card {
+    border-radius: 20px;
+    transition: transform 0.3s ease-in-out;
+  }
+  
+  .card:hover {
+    transform: rotateX(3deg) rotateY(3deg);
+  }
+  

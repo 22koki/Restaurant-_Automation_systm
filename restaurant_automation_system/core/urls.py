@@ -1,4 +1,5 @@
 from django.urls import path, include
+from . import views
 from rest_framework.routers import DefaultRouter
 from .views import (
     ping,
@@ -19,6 +20,7 @@ router.register(r'invoices', InvoiceViewSet)
 router.register(r'cheques', ChequeViewSet)
 
 urlpatterns = [
-    path("ping/", ping, name="ping"),
-    path("", include(router.urls)),  # include all the API routes
+    path('api/', include(router.urls)),
+    path('api/low-stock/', views.low_stock_alerts),
+    path('api/ping/', views.ping),
 ]
