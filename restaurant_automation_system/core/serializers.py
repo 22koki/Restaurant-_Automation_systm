@@ -14,16 +14,39 @@ class MenuItemSerializer(serializers.ModelSerializer):
 class OrderDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderDetail
-        fields = '__all__'
-
-
+        fields = ['id', 'menu_item', 'quantity']
 class OrderSerializer(serializers.ModelSerializer):
-    details = OrderDetailSerializer(many=True, read_only=True)
+    order_details = OrderDetailSerializer(many=True, write_only=True)
+    details = OrderDetailSerializer(source='orderdetail_set', many=True, read_only=True)
 
     class Meta:
         model = Order
-        fields = ['id', 'salesclerk', 'created_at', 'total', 'details']
+        fields = ['id', 'salesclerk', 'created_at', 'total', 'order_details', 'details']
 
+    def create(self, validated_data):
+        order_details_data = validated_data.pop('order_details')
+        order = Order.objects.create(**validated_data)
+
+        total = 0
+        for detail_data in order_details_data:
+            menu_item = detail_data['menu_item']
+            quantity = detail_data['quantity']
+            subtotal = menu_item.price * quantity
+
+            # Now include subtotal when creating the OrderDetail
+            OrderDetail.objects.create(
+                order=order,
+                menu_item=menu_item,
+                quantity=quantity,
+                subtotal=subtotal
+            )
+
+            total += subtotal
+
+        order.total = total
+        order.save()
+
+        return order
 
 class IngredientSerializer(serializers.ModelSerializer):
     class Meta:

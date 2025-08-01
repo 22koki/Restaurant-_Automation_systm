@@ -4,23 +4,23 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.http import JsonResponse
 from django.db import models
+from django.db.models import F  # <-- ✅ Add this
 
 from .models import (
     MenuItem, Order, OrderDetail, Ingredient, ItemIngredient,
     Inventory, PurchaseOrder, Invoice, Cheque
 )
+
 from .serializers import (
     MenuItemSerializer, OrderSerializer, OrderDetailSerializer,
     IngredientSerializer, ItemIngredientSerializer, InventorySerializer,
     PurchaseOrderSerializer, InvoiceSerializer, ChequeSerializer
 )
-
 @api_view(['GET'])
 def low_stock_alerts(request):
-    low_stock_items = Inventory.objects.filter(quantity_in_stock__lte=models.F('threshold'))
-    data = [{"ingredient": inv.ingredient.name, "quantity_in_stock": inv.quantity_in_stock, "threshold": inv.threshold}
-            for inv in low_stock_items]
-    return Response(data)
+    low_stock_items = Inventory.objects.filter(quantity_in_stock__lte=F('ingredient__threshold'))
+    serializer = InventorySerializer(low_stock_items, many=True)
+    return Response(serializer.data)
 
 def ping(request):
     return JsonResponse({"message": "pong"})
