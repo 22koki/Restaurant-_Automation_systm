@@ -73,3 +73,24 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 class ChequeViewSet(viewsets.ModelViewSet):
     queryset = Cheque.objects.all()
     serializer_class = ChequeSerializer
+@api_view(['GET'])
+def menu_card(request):
+    menu_items = MenuItem.objects.prefetch_related('itemingredient_set__ingredient').all()
+    data = []
+
+    for item in menu_items:
+        ingredients = [
+            {
+                "name": ii.ingredient.name,
+                "quantity_required": ii.quantity_required,
+            }
+            for ii in item.itemingredient_set.all()
+        ]
+
+        data.append({
+            "name": item.name,
+            "price": item.price,
+            "ingredients": ingredients
+        })
+
+    return Response(data)

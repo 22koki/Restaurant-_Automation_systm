@@ -32,12 +32,23 @@ class OrderDetail(models.Model):
 
 class Ingredient(models.Model):
     name = models.CharField(max_length=100)
-    unit = models.CharField(max_length=20)  # e.g., 'kg', 'liters', 'pieces'
-    threshold = models.FloatField(help_text="Minimum stock before reordering")
+    unit = models.CharField(max_length=20)
 
-    def __str__(self):
-        return self.name
+    def calculate_threshold(self):
+        from datetime import timedelta
+        from django.utils import timezone
 
+        three_days_ago = timezone.now() - timedelta(days=3)
+        usages = IngredientUsage.objects.filter(ingredient=self, used_at__gte=three_days_ago)
+        total_used = sum(u.quantity_used for u in usages)
+        avg_per_day = total_used / 3 if total_used else 0
+        return avg_per_day * 2
+ # NEW
+class IngredientUsage(models.Model):
+    ingredient = models.ForeignKey(Ingredient, on_delete=models.CASCADE)
+    quantity_used = models.FloatField()
+    used_at = models.DateTimeField(auto_now_add=True)
+     
 
 class ItemIngredient(models.Model):
     menu_item = models.ForeignKey(MenuItem, on_delete=models.CASCADE)
@@ -86,3 +97,32 @@ class Cheque(models.Model):
 
     def __str__(self):
         return f"Cheque for Invoice #{self.invoice.id}"
+class CashRegister(models.Model):
+    balance = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    last_updated = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Cash Balance: {self.balance}"
+class PriceChangeLog(models.Model):
+    menu_item = models.ForeignKey(MenuItem, on_delete=models.CASCADE)
+    old_price = models.DecimalField(max_digits=8, decimal_places=2)
+    new_price = models.DecimalField(max_digits=8, decimal_places=2)
+    changed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.menu_item.name}: {self.old_price} → {self.new_price} on {self.changed_at}"
+class SalesReport(models.Model):
+    month = models.DateField(help_text="Any date within the month")
+    total_sales = models.DecimalField(max_digits=12, decimal_places=2)
+    total_expenses = models.DecimalField(max_digits=12, decimal_places=2)
+    generated_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Report for {self.month.strftime('%B %Y')}"
+class CashBalance(models.Model):
+    balance = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Cash Balance: {self.balance}"
