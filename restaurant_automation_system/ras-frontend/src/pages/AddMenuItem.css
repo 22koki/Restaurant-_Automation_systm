@@ -1,0 +1,23 @@
+/* src/pages/AddMenuItem.css */
+.add-menu-item {
+  padding: 30px;
+  background: url('/home/fay/Restaurant-_Automation_systm/restaurant_automation_system/ras-frontend/public/images/istockphoto-1304350137-2048x2048.jpg') no-repeat center center;
+  background-size: cover;
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.2);
+}
+
+.page-title {
+  color: #fff;
+  background: rgba(0,0,0,0.6);
+  padding: 10px 20px;
+  border-radius: 4px;
+  font-weight: bold;
+  margin-bottom: 20px;
+}
+
+.form-container {
+  background: rgba(255, 255, 255, 0.9);
+  padding: 20px;
+  border-radius: 8px;
+}

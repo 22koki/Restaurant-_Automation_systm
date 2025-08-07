@@ -1,0 +1,9 @@
+.orders-page {
+  background-image: url('/home/fay/Restaurant-_Automation_systm/restaurant_automation_system/ras-frontend/public/images/istockphoto-1150377750-2048x2048.jpg'); /* Replace with your actual image path */
+  background-size: cover;
+  background-position: center;
+  min-height: 100vh;
+  padding-top: 60px;
+  padding-bottom: 60px;
+  backdrop-filter: blur(3px);
+}

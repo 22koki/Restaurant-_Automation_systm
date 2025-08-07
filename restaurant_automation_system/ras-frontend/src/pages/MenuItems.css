@@ -1,0 +1,44 @@
+/* src/pages/MenuItems.css */
+.menu-items-page {
+    padding: 30px;
+    background: url('/home/fay/Restaurant-_Automation_systm/restaurant_automation_system/ras-frontend/public/images/premium_photo-1661883237884-263e8de8869b.avif') no-repeat center center fixed;
+    background-size: cover;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.2);
+  }
+  
+  .page-title {
+    color: #fff;
+    background: rgba(0,0,0,0.6);
+    padding: 10px 20px;
+    border-radius: 4px;
+    font-weight: bold;
+    margin-bottom: 20px;
+  }
+  
+  .custom-table th {
+    background-color: #343a40 !important;
+    color: #fff;
+  }
+  
+  .custom-table td {
+    background: rgba(255, 255, 255, 0.9);
+  }
+  
+  .btn-primary {
+    background-color: #007bff;
+    border: none;
+  }
+  
+  .btn-primary:hover {
+    background-color: #0069d9;
+  }
+  
+  .btn-warning {
+    color: #212529;
+  }
+  
+  .btn-danger {
+    color: #fff;
+  }
+  

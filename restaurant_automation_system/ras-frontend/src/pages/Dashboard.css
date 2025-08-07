@@ -1,9 +1,35 @@
-.card {
-    border-radius: 20px;
-    transition: transform 0.3s ease-in-out;
-  }
-  
-  .card:hover {
-    transform: rotateX(3deg) rotateY(3deg);
-  }
-  
+.dashboard-container {
+  background: url('/home/fay/Restaurant-_Automation_systm/restaurant_automation_system/ras-frontend/public/images/istockphoto-1304350137-2048x2048.jpg') no-repeat center center fixed;
+  background-size: cover;
+  padding: 40px 20px;
+  min-height: 100vh;
+  color: #fff;
+  backdrop-filter: blur(2px);
+}
+
+.dashboard-title {
+  font-weight: bold;
+  font-size: 2.5rem;
+  color: #cf9708;
+}
+
+.highlight {
+  color: #f44336;
+}
+
+.dashboard-card {
+  background-color: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #be1b1b;
+  transition: transform 0.2s, background-color 0.3s;
+}
+
+.dashboard-card:hover {
+  background-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-5px);
+}
+
+.icon-large {
+  font-size: 5rem;
+  color: #ffcc00;
+}
