@@ -218,8 +218,28 @@ class OrderViewSet(viewsets.ModelViewSet):
 
 class OrderDetailViewSet(viewsets.ModelViewSet):
     permission_classes = [KitchenPermission]
-    queryset = OrderDetail.objects.select_related('order', 'menu_item').all()
+    queryset = OrderDetail.objects.select_related('order', 'menu_item', 'order__table').all()
     serializer_class = OrderDetailSerializer
+
+    def perform_update(self, serializer):
+        detail = serializer.save()
+        order = detail.order
+        active_details = list(order.details.exclude(status='cancelled'))
+
+        if detail.status == 'preparing':
+            order.status = 'preparing'
+            if order.table:
+                order.table.status = 'preparing'
+                order.table.save(update_fields=['status'])
+        elif active_details and all(item.status == 'ready' for item in active_details):
+            order.status = 'ready'
+        elif active_details and all(item.status == 'served' for item in active_details):
+            order.status = 'awaiting_payment'
+            if order.table:
+                order.table.status = 'ready_to_bill'
+                order.table.save(update_fields=['status'])
+
+        order.save(update_fields=['status', 'updated_at'])
 
 
 class IngredientViewSet(viewsets.ModelViewSet):
