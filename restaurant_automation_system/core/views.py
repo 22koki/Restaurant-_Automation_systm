@@ -1,10 +1,14 @@
 from django.http import JsonResponse
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
+from rest_framework.authtoken.models import Token
+from rest_framework.permissions import AllowAny
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.db import transaction
+from django.contrib.auth import authenticate
 
+from .permissions import ActiveStaffPermission, OwnerManagerPermission, CashierManagerPermission, ServicePermission, KitchenPermission, InventoryPermission, staff_role
 from .models import (
     MenuItem, Order, OrderDetail, Ingredient, ItemIngredient,
     Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation, Payment, StaffProfile
@@ -27,6 +31,45 @@ def low_stock_alerts(request):
     ]
     serializer = InventorySerializer(low_stock_items, many=True)
     return Response(serializer.data)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def staff_login(request):
+    username = request.data.get('username', '').strip()
+    password = request.data.get('password', '')
+    user = authenticate(username=username, password=password)
+    role = staff_role(user)
+    if not user or not role:
+        return Response({'detail': 'Invalid credentials or inactive staff account.'}, status=status.HTTP_400_BAD_REQUEST)
+    token, _ = Token.objects.get_or_create(user=user)
+    return Response({
+        'token': token.key,
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'name': user.get_full_name().strip() or user.username,
+            'role': role,
+        }
+    })
+
+
+@api_view(['POST'])
+def staff_logout(request):
+    if request.user.is_authenticated:
+        Token.objects.filter(user=request.user).delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['GET'])
+@permission_classes([ActiveStaffPermission])
+def staff_me(request):
+    return Response({
+        'id': request.user.id,
+        'username': request.user.username,
+        'name': request.user.get_full_name().strip() or request.user.username,
+        'role': staff_role(request.user),
+    })
 
 
 def ping(request):
@@ -91,6 +134,7 @@ def initial_setup(request):
 
 
 class StaffProfileViewSet(viewsets.ModelViewSet):
+    permission_classes = [OwnerManagerPermission]
     queryset = StaffProfile.objects.select_related('user').order_by('role', 'user__first_name', 'user__username')
     serializer_class = StaffProfileSerializer
 
