@@ -5,6 +5,8 @@ import MenuItemsPage from './pages/MenuItemsPage';
 import AddMenuItem from './pages/AddMenuItem';
 import OrdersPage from './pages/OrdersPage';
 import CustomerMenu from './pages/CustomerMenu';
+import KitchenDisplay from './pages/KitchenDisplay';
+import WaiterBoard from './pages/WaiterBoard';
 
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap-icons/font/bootstrap-icons.css';
@@ -29,6 +31,8 @@ function App() {
               <div className="navbar-nav ms-auto">
                 <Link className="nav-link" to="/menu-items">Menu Manager</Link>
                 <Link className="nav-link" to="/orders">Orders</Link>
+                <Link className="nav-link" to="/kitchen">Kitchen</Link>
+                <Link className="nav-link" to="/service">Service</Link>
                 <Link className="nav-link" to="/menu">Customer Menu</Link>
               </div>
             </div>
@@ -43,6 +47,8 @@ function App() {
           <Route path="/menu-items" element={<MenuItemsPage />} />
           <Route path="/add-menu-item" element={<AddMenuItem />} />
           <Route path="/orders" element={<OrdersPage />} />
+          <Route path="/kitchen" element={<KitchenDisplay />} />
+          <Route path="/service" element={<WaiterBoard />} />
         </Routes>
       </main>
     </div>
