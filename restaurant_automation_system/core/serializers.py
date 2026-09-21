@@ -41,6 +41,10 @@ class OrderDetailSerializer(serializers.ModelSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     order_details = OrderDetailSerializer(many=True, write_only=True, required=False)
+    salesclerk_username = serializers.ReadOnlyField(source='salesclerk.username')
+    salesclerk_name = serializers.SerializerMethodField()
+    salesclerk_roles = serializers.SerializerMethodField()
+    table_number = serializers.ReadOnlyField(source='table.number')
     details = OrderDetailSerializer(many=True, read_only=True)
     total = serializers.DecimalField(
         max_digits=10, decimal_places=2, read_only=True
@@ -49,11 +53,23 @@ class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = [
-            'id', 'salesclerk', 'table', 'order_type', 'status',
+            'id', 'salesclerk', 'salesclerk_username', 'salesclerk_name',
+            'salesclerk_roles', 'table', 'table_number', 'order_type', 'status',
             'customer_name', 'customer_phone', 'notes', 'created_at',
             'updated_at', 'total', 'order_details', 'details'
         ]
         read_only_fields = ['salesclerk', 'created_at', 'updated_at', 'total']
+
+    def get_salesclerk_name(self, obj):
+        if not obj.salesclerk:
+            return ''
+        full_name = obj.salesclerk.get_full_name().strip()
+        return full_name or obj.salesclerk.username
+
+    def get_salesclerk_roles(self, obj):
+        if not obj.salesclerk:
+            return []
+        return list(obj.salesclerk.groups.values_list('name', flat=True))
 
     @transaction.atomic
     def create(self, validated_data):
