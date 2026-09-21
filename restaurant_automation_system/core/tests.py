@@ -178,3 +178,46 @@ class RestaurantWorkflowTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         order.refresh_from_db()
         self.assertEqual(order.status, 'served')
+
+
+class PaymentWorkflowTests(APITestCase):
+    def setUp(self):
+        from .models import RestaurantTable
+        self.table = RestaurantTable.objects.create(number='12', seats=4, status='ready_to_bill')
+        self.order = Order.objects.create(
+            table=self.table,
+            order_type='dine_in',
+            status='awaiting_payment',
+            total=Decimal('2000.00')
+        )
+
+    def test_cash_payment_completes_order_and_sends_table_to_cleaning(self):
+        response = self.client.post(
+            reverse('payment-list'),
+            {'order': self.order.id, 'method': 'cash', 'amount': '2000.00'},
+            format='json'
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.order.refresh_from_db()
+        self.table.refresh_from_db()
+        self.assertEqual(self.order.status, 'completed')
+        self.assertEqual(self.table.status, 'cleaning')
+        self.assertEqual(response.data['status'], 'paid')
+
+    def test_partial_payment_keeps_order_awaiting_payment(self):
+        response = self.client.post(
+            reverse('payment-list'),
+            {'order': self.order.id, 'method': 'cash', 'amount': '500.00'},
+            format='json'
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, 'awaiting_payment')
+
+    def test_overpayment_is_rejected(self):
+        response = self.client.post(
+            reverse('payment-list'),
+            {'order': self.order.id, 'method': 'card', 'amount': '2500.00'},
+            format='json'
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
