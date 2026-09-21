@@ -3,7 +3,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import AllowAny
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
 from django.db import transaction
 from django.contrib.auth import authenticate
@@ -22,6 +22,7 @@ from .serializers import (
 
 
 @api_view(['GET'])
+@permission_classes([InventoryPermission])
 def low_stock_alerts(request):
     inventory_items = Inventory.objects.select_related('ingredient').all()
     low_stock_items = [
@@ -77,6 +78,7 @@ def ping(request):
 
 
 @api_view(['POST'])
+@permission_classes([OwnerManagerPermission])
 @transaction.atomic
 def initial_setup(request):
     table_count = int(request.data.get('table_count', 12))
@@ -139,7 +141,25 @@ class StaffProfileViewSet(viewsets.ModelViewSet):
     serializer_class = StaffProfileSerializer
 
 
+@api_view(['GET'])
+@permission_classes([ActiveStaffPermission])
+def staff_directory(request):
+    profiles = StaffProfile.objects.select_related('user').filter(
+        active=True,
+        role__in=['waiter', 'cashier']
+    ).order_by('role', 'user__first_name', 'user__username')
+    return Response([
+        {
+            'user': profile.user_id,
+            'name': profile.user.get_full_name().strip() or profile.user.username,
+            'role': profile.role,
+        }
+        for profile in profiles
+    ])
+
+
 class PaymentViewSet(viewsets.ModelViewSet):
+    permission_classes = [CashierManagerPermission]
     queryset = Payment.objects.select_related('order', 'order__table').order_by('-created_at')
     serializer_class = PaymentSerializer
 
@@ -148,8 +168,14 @@ class RestaurantTableViewSet(viewsets.ModelViewSet):
     queryset = RestaurantTable.objects.all().order_by('number')
     serializer_class = RestaurantTableSerializer
 
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve'):
+            return [AllowAny()]
+        return [ServicePermission()]
+
 
 class ReservationViewSet(viewsets.ModelViewSet):
+    permission_classes = [ServicePermission]
     queryset = Reservation.objects.select_related('table').order_by('-reservation_at')
     serializer_class = ReservationSerializer
 
@@ -158,6 +184,11 @@ class MenuItemViewSet(viewsets.ModelViewSet):
     queryset = MenuItem.objects.all().order_by('name')
     serializer_class = MenuItemSerializer
 
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve'):
+            return [AllowAny()] if self.request.query_params.get('public') == '1' else [ActiveStaffPermission()]
+        return [OwnerManagerPermission()]
+
 
 class OrderViewSet(viewsets.ModelViewSet):
     queryset = Order.objects.prefetch_related(
@@ -165,18 +196,40 @@ class OrderViewSet(viewsets.ModelViewSet):
     ).select_related('salesclerk', 'waiter', 'cashier', 'table').order_by('-created_at')
     serializer_class = OrderSerializer
 
+    def get_permissions(self):
+        if self.action == 'create':
+            return [AllowAny()]
+        return [ActiveStaffPermission()]
+
+    @action(detail=True, methods=['get'], permission_classes=[CashierManagerPermission])
+    def receipt(self, request, pk=None):
+        order = self.get_object()
+        payments = list(order.payments.order_by('created_at'))
+        paid_total = sum(p.amount for p in payments if p.status == 'paid')
+        return Response({
+            'receipt_number': f'SVR-{order.id:06d}',
+            'order': OrderSerializer(order, context={'request': request}).data,
+            'payments': PaymentSerializer(payments, many=True).data,
+            'paid_total': paid_total,
+            'balance': order.total - paid_total,
+            'is_paid': paid_total >= order.total,
+        })
+
 
 class OrderDetailViewSet(viewsets.ModelViewSet):
+    permission_classes = [KitchenPermission]
     queryset = OrderDetail.objects.select_related('order', 'menu_item').all()
     serializer_class = OrderDetailSerializer
 
 
 class IngredientViewSet(viewsets.ModelViewSet):
+    permission_classes = [InventoryPermission]
     queryset = Ingredient.objects.all().order_by('name')
     serializer_class = IngredientSerializer
 
 
 class ItemIngredientViewSet(viewsets.ModelViewSet):
+    permission_classes = [InventoryPermission]
     queryset = ItemIngredient.objects.select_related(
         'menu_item', 'ingredient'
     ).all()
@@ -184,6 +237,7 @@ class ItemIngredientViewSet(viewsets.ModelViewSet):
 
 
 class InventoryViewSet(viewsets.ModelViewSet):
+    permission_classes = [InventoryPermission]
     queryset = Inventory.objects.select_related('ingredient').all()
     serializer_class = InventorySerializer
     filter_backends = [
@@ -197,6 +251,7 @@ class InventoryViewSet(viewsets.ModelViewSet):
 
 
 class PurchaseOrderViewSet(viewsets.ModelViewSet):
+    permission_classes = [InventoryPermission]
     queryset = PurchaseOrder.objects.select_related(
         'ingredient'
     ).order_by('-created_at')
@@ -204,6 +259,7 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
 
 
 class InvoiceViewSet(viewsets.ModelViewSet):
+    permission_classes = [InventoryPermission]
     queryset = Invoice.objects.select_related(
         'purchase_order__ingredient'
     ).order_by('-received_at')
@@ -211,6 +267,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
 
 class ChequeViewSet(viewsets.ModelViewSet):
+    permission_classes = [OwnerManagerPermission]
     queryset = Cheque.objects.select_related(
         'invoice__purchase_order__ingredient'
     ).order_by('-issued_at')
