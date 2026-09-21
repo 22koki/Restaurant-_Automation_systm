@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { api } from '../services/api';
 import { Link } from 'react-router-dom';
 import './Dashboard.css';
 
@@ -7,11 +8,24 @@ const modules = [
   { to: '/menu-items', icon: 'bi-journal-richtext', title: 'Menu Studio', text: 'Manage dishes, pricing, availability and prep stations.' },
   { to: '/menu', icon: 'bi-phone', title: 'Guest Experience', text: 'Preview the mobile-first menu your customers will use.' },
   { to: '/inventory', icon: 'bi-box-seam', title: 'Inventory', text: 'Track ingredients, usage and low-stock risk.' },
-  { to: '/tables', icon: 'bi-grid-3x3-gap', title: 'Tables', text: 'See availability, occupied tables and service state.' },
+  { to: '/floor', icon: 'bi-grid-3x3-gap', title: 'Tables', text: 'See availability, occupied tables and service state.' },
   { to: '/reservations', icon: 'bi-calendar2-check', title: 'Reservations', text: 'Manage upcoming guests, party sizes and seating.' },
 ];
 
 function Dashboard() {
+  const [metrics, setMetrics] = useState({openOrders:0,tablesInService:0,kitchenQueue:0,lowStock:0});
+  useEffect(() => {
+    Promise.all([api.get('orders/'), api.get('tables/'), api.get('inventory/')])
+      .then(([orders,tables,inventory]) => {
+        setMetrics({
+          openOrders: orders.data.filter(o => !['completed','cancelled'].includes(o.status)).length,
+          tablesInService: tables.data.filter(t => !['available','cleaning'].includes(t.status)).length,
+          kitchenQueue: orders.data.reduce((n,o) => n + (o.details || []).filter(x => ['queued','preparing'].includes(x.status)).length, 0),
+          lowStock: inventory.data.filter(x => x.is_low_stock).length,
+        });
+      })
+      .catch(() => {});
+  }, []);
   return (
     <div className="ops-shell">
       <section className="ops-hero">
@@ -24,10 +38,10 @@ function Dashboard() {
       </section>
 
       <section className="ops-status">
-        <div><span>Open orders</span><strong>—</strong><small>Live API data next</small></div>
-        <div><span>Tables in service</span><strong>—</strong><small>Floor view ready for wiring</small></div>
-        <div><span>Kitchen queue</span><strong>—</strong><small>Ticket workflow prepared</small></div>
-        <div><span>Low stock</span><strong>—</strong><small>Inventory alerts available</small></div>
+        <div><span>Open orders</span><strong>{metrics.openOrders}</strong><small>Active guest tickets</small></div>
+        <div><span>Tables in service</span><strong>{metrics.tablesInService}</strong><small>Currently in the guest journey</small></div>
+        <div><span>Kitchen queue</span><strong>{metrics.kitchenQueue}</strong><small>Items queued or preparing</small></div>
+        <div><span>Low stock</span><strong>{metrics.lowStock}</strong><small>Ingredients needing attention</small></div>
       </section>
 
       <section className="ops-modules">
