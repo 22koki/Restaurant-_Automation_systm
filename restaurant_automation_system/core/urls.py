@@ -28,4 +28,5 @@ urlpatterns = [
     path('api/low-stock/', views.low_stock_alerts),
     path('api/ping/', views.ping),
     path('api/menu-card/', views.menu_card),
+    path('api/setup/', views.initial_setup),
 ]
