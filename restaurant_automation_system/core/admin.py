@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     MenuItem, Order, OrderDetail, Ingredient,
     ItemIngredient, Inventory, PurchaseOrder,
-    Invoice, Cheque
+    Invoice, Cheque, RestaurantTable, Reservation
 )
 
 admin.site.register(MenuItem)
@@ -14,3 +14,6 @@ admin.site.register(Inventory)
 admin.site.register(PurchaseOrder)
 admin.site.register(Invoice)
 admin.site.register(Cheque)
+
+admin.site.register(RestaurantTable)
+admin.site.register(Reservation)
