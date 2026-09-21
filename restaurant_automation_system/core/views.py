@@ -7,13 +7,13 @@ from django.db import transaction
 
 from .models import (
     MenuItem, Order, OrderDetail, Ingredient, ItemIngredient,
-    Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation, Payment
+    Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation, Payment, StaffProfile
 )
 from .serializers import (
     MenuItemSerializer, OrderSerializer, OrderDetailSerializer,
     IngredientSerializer, ItemIngredientSerializer, InventorySerializer,
     PurchaseOrderSerializer, InvoiceSerializer, ChequeSerializer,
-    RestaurantTableSerializer, ReservationSerializer, PaymentSerializer
+    RestaurantTableSerializer, ReservationSerializer, PaymentSerializer, StaffProfileSerializer
 )
 
 
@@ -90,6 +90,11 @@ def initial_setup(request):
     })
 
 
+class StaffProfileViewSet(viewsets.ModelViewSet):
+    queryset = StaffProfile.objects.select_related('user').order_by('role', 'user__first_name', 'user__username')
+    serializer_class = StaffProfileSerializer
+
+
 class PaymentViewSet(viewsets.ModelViewSet):
     queryset = Payment.objects.select_related('order', 'order__table').order_by('-created_at')
     serializer_class = PaymentSerializer
@@ -113,7 +118,7 @@ class MenuItemViewSet(viewsets.ModelViewSet):
 class OrderViewSet(viewsets.ModelViewSet):
     queryset = Order.objects.prefetch_related(
         'details__menu_item'
-    ).select_related('salesclerk', 'table').order_by('-created_at')
+    ).select_related('salesclerk', 'waiter', 'cashier', 'table').order_by('-created_at')
     serializer_class = OrderSerializer
 
 
