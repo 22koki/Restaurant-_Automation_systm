@@ -28,6 +28,9 @@ urlpatterns = [
     path('api/', include(router.urls)),
     path('api/low-stock/', views.low_stock_alerts),
     path('api/ping/', views.ping),
+    path('api/auth/login/', views.staff_login),
+    path('api/auth/logout/', views.staff_logout),
+    path('api/auth/me/', views.staff_me),
     path('api/menu-card/', views.menu_card),
     path('api/setup/', views.initial_setup),
 ]
