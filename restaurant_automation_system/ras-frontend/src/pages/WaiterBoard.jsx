@@ -1,39 +1,12 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { api } from '../services/api';
-import './WaiterBoard.css';
-import { useAuth } from '../context/AuthContext';
-
-function WaiterBoard() {
-  const [orders, setOrders] = useState([]);
-  const { user } = useAuth();
-
-  const load = useCallback(() => api.get('orders/').then(({ data }) => setOrders(data)), []);
-  useEffect(() => { load(); const timer = setInterval(load, 15000); return () => clearInterval(timer); }, [load]);
-
-  const myOrders = user?.role === 'waiter' ? orders.filter((order) => order.waiter === user.id) : orders;
-  const readyOrders = myOrders.filter((order) => (order.details || []).some((item) => item.status === 'ready'));
-  const serveItem = async (item, order) => {
-    await api.patch(`order-details/${item.id}/`, { status: 'served' });
-    const remaining = order.details.filter((detail) => detail.id !== item.id && !['served', 'cancelled'].includes(detail.status));
-    if (!remaining.length) await api.patch(`orders/${order.id}/`, { status: 'served' });
-    load();
-  };
-
-  return (
-    <div className="waiter-shell">
-      <header><span>Service pass</span><h1>Ready to run</h1><p>{user?.role === 'waiter' ? 'Only dishes assigned to you appear here. Run them while they are hot.' : 'Food the kitchen has marked ready appears here immediately.'}</p></header>
-      <div className="ready-grid">
-        {readyOrders.map((order) => (
-          <article className="ready-order" key={order.id}>
-            <div className="ready-order-head"><strong>{order.table ? `Table ${order.table_number || order.table}` : order.order_type.replace('_', ' ')}</strong><span>Order #{order.id}</span></div>
-            {(order.details || []).filter((item) => item.status === 'ready').map((item) => (
-              <div className="ready-item" key={item.id}><div><h3>{item.quantity} × {item.menu_item_name}</h3>{item.notes && <p>{item.notes}</p>}</div><button onClick={() => serveItem(item, order)}>Served</button></div>
-            ))}
-          </article>
-        ))}
-        {!readyOrders.length && <div className="all-clear"><i className="bi bi-check2-circle"/><h2>Pass is clear</h2><p>No dishes are waiting to be served.</p></div>}
-      </div>
-    </div>
-  );
-}
+import React,{useCallback,useEffect,useMemo,useState}from'react';import{api}from'../services/api';import'./WaiterBoard.css';import{useAuth}from'../context/AuthContext';
+function WaiterBoard(){const[orders,setOrders]=useState([]),[menu,setMenu]=useState([]),[tables,setTables]=useState([]),[cart,setCart]=useState([]),[table,setTable]=useState(''),[note,setNote]=useState(''),[error,setError]=useState('');const{user}=useAuth();
+const load=useCallback(()=>Promise.all([api.get('orders/'),api.get('menu-items/'),api.get('tables/')]).then(([o,m,t])=>{setOrders(o.data);setMenu(m.data.filter(x=>x.available));setTables(t.data.filter(x=>x.active))}).catch(()=>setError('Could not refresh service workspace.')),[]);
+useEffect(()=>{load();const timer=setInterval(load,15000);return()=>clearInterval(timer)},[load]);
+const myOrders=user?.role==='waiter'?orders.filter(o=>o.waiter===user.id):orders;const readyOrders=myOrders.filter(o=>(o.details||[]).some(i=>i.status==='ready'));
+const grouped=useMemo(()=>Object.values(cart.reduce((a,x)=>{a[x.id]=a[x.id]?{...a[x.id],quantity:a[x.id].quantity+1}:{...x,quantity:1};return a},{})),[cart]);const total=cart.reduce((s,x)=>s+Number(x.price),0);
+const send=async()=>{if(!table||!cart.length)return;setError('');try{await api.post('orders/',{order_type:'dine_in',table:Number(table),notes:note,order_details:grouped.map(x=>({menu_item:x.id,quantity:x.quantity,notes:''}))});setCart([]);setTable('');setNote('');await load()}catch(e){setError(Object.values(e.response?.data||{detail:'Could not send order.'}).flat().join(' '))}};
+const serveItem=async(item)=>{await api.patch('order-details/'+item.id+'/',{status:'served'});load()};
+return <div className="waiter-shell"><header><span>Service workspace</span><h1>{user?.name||'Waiter'}'s tables</h1><p>Take orders, follow the kitchen and run ready dishes from one screen.</p></header>{error&&<div className="alert alert-danger">{error}</div>}
+<section className="mb-4 p-4 bg-white rounded-4 shadow-sm"><div className="d-flex justify-content-between align-items-center mb-3"><div><small>NEW TABLE ORDER</small><h2>Take an order</h2></div><strong>KSh {total.toLocaleString()}</strong></div><select className="form-select mb-3" value={table} onChange={e=>setTable(e.target.value)}><option value="">Choose table</option>{tables.filter(t=>['available','occupied','ordering','preparing'].includes(t.status)).map(t=><option key={t.id} value={t.id}>Table {t.number} · {t.status.replaceAll('_',' ')}</option>)}</select><div className="row g-2 mb-3">{menu.map(item=><div className="col-md-4" key={item.id}><button type="button" className="btn btn-light border w-100 text-start h-100" onClick={()=>setCart([...cart,item])}><strong>{item.name}</strong><br/><small>{item.category}</small><br/><b>KSh {Number(item.price).toLocaleString()}</b></button></div>)}</div>{grouped.length>0&&<div className="mb-3">{grouped.map(x=><div className="d-flex justify-content-between border-bottom py-2" key={x.id}><span>{x.quantity} × {x.name}</span><button className="btn btn-sm btn-outline-danger" onClick={()=>{const index=cart.findIndex(c=>c.id===x.id);setCart(cart.filter((_,i)=>i!==index))}}>−</button></div>)}</div>}<input className="form-control mb-3" placeholder="Table/order note (optional)" value={note} onChange={e=>setNote(e.target.value)}/><button className="btn btn-success" disabled={!table||!cart.length} onClick={send}>Send order to kitchen</button></section>
+<div className="ready-grid">{readyOrders.map(order=><article className="ready-order" key={order.id}><div className="ready-order-head"><strong>{order.table?('Table '+(order.table_number||order.table)):order.order_type.replace('_',' ')}</strong><span>Order #{order.id}</span></div>{(order.details||[]).filter(i=>i.status==='ready').map(item=><div className="ready-item" key={item.id}><div><h3>{item.quantity} × {item.menu_item_name}</h3>{item.notes&&<p>{item.notes}</p>}</div><button onClick={()=>serveItem(item)}>Served</button></div>)}</article>)}{!readyOrders.length&&<div className="all-clear"><i className="bi bi-check2-circle"/><h2>Pass is clear</h2><p>No dishes are waiting to be served.</p></div>}</div></div>}
 export default WaiterBoard;
