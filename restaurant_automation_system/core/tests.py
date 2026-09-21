@@ -108,3 +108,70 @@ class InventoryApiTests(APITestCase):
         self.assertIn(inventory.id, returned_ids)
         self.assertIn('threshold', response.data[0])
         self.assertIn('is_low_stock', response.data[0])
+
+
+class RestaurantWorkflowTests(APITestCase):
+    def setUp(self):
+        self.menu_item = MenuItem.objects.create(
+            name='Grilled Chicken',
+            price=Decimal('1450.00'),
+            available=True
+        )
+
+    def test_guest_can_place_takeaway_order_without_login(self):
+        response = self.client.post(
+            reverse('order-list'),
+            {
+                'order_type': 'takeaway',
+                'customer_name': 'Guest',
+                'order_details': [
+                    {'menu_item': self.menu_item.id, 'quantity': 1}
+                ]
+            },
+            format='json'
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['status'], 'confirmed')
+        self.assertEqual(response.data['order_type'], 'takeaway')
+
+    def test_kitchen_can_patch_item_status_without_order_payload(self):
+        order = Order.objects.create(
+            order_type='takeaway',
+            status='confirmed',
+            total=Decimal('1450.00')
+        )
+        from .models import OrderDetail
+        detail = OrderDetail.objects.create(
+            order=order,
+            menu_item=self.menu_item,
+            quantity=1,
+            subtotal=Decimal('1450.00')
+        )
+
+        response = self.client.patch(
+            reverse('orderdetail-detail', args=[detail.id]),
+            {'status': 'preparing'},
+            format='json'
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        detail.refresh_from_db()
+        self.assertEqual(detail.status, 'preparing')
+
+    def test_order_status_can_be_patched_without_resending_items(self):
+        order = Order.objects.create(
+            order_type='takeaway',
+            status='confirmed',
+            total=Decimal('1450.00')
+        )
+
+        response = self.client.patch(
+            reverse('order-detail', args=[order.id]),
+            {'status': 'served'},
+            format='json'
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'served')
