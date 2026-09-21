@@ -10,7 +10,7 @@ from .models import (
     Inventory,
     ItemIngredient,
     MenuItem,
-    Order,
+    Order, StaffProfile,
 )
 
 
@@ -20,6 +20,7 @@ class OrderApiTests(APITestCase):
             username='cashier',
             password='test-password'
         )
+        StaffProfile.objects.create(user=self.user, role='cashier')
         self.client.force_authenticate(user=self.user)
 
         self.beef = Ingredient.objects.create(name='Beef', unit='g')
@@ -97,6 +98,11 @@ class OrderApiTests(APITestCase):
 
 
 class InventoryApiTests(APITestCase):
+    def setUp(self):
+        user = User.objects.create_user(username='storekeeper', password='test-password')
+        StaffProfile.objects.create(user=user, role='storekeeper')
+        self.client.force_authenticate(user=user)
+
     def test_low_stock_endpoint_returns_dynamic_threshold_data(self):
         ingredient = Ingredient.objects.create(name='Tomatoes', unit='kg')
         inventory = Inventory.objects.create(
@@ -139,6 +145,9 @@ class RestaurantWorkflowTests(APITestCase):
         self.assertEqual(response.data['order_type'], 'takeaway')
 
     def test_kitchen_can_patch_item_status_without_order_payload(self):
+        user = User.objects.create_user(username='kitchen', password='test-password')
+        StaffProfile.objects.create(user=user, role='kitchen')
+        self.client.force_authenticate(user=user)
         order = Order.objects.create(
             order_type='takeaway',
             status='confirmed',
@@ -163,6 +172,9 @@ class RestaurantWorkflowTests(APITestCase):
         self.assertEqual(detail.status, 'preparing')
 
     def test_order_status_can_be_patched_without_resending_items(self):
+        user = User.objects.create_user(username='waiter', password='test-password')
+        StaffProfile.objects.create(user=user, role='waiter')
+        self.client.force_authenticate(user=user)
         order = Order.objects.create(
             order_type='takeaway',
             status='confirmed',
@@ -182,6 +194,9 @@ class RestaurantWorkflowTests(APITestCase):
 
 class PaymentWorkflowTests(APITestCase):
     def setUp(self):
+        user = User.objects.create_user(username='payment-cashier', password='test-password')
+        StaffProfile.objects.create(user=user, role='cashier')
+        self.client.force_authenticate(user=user)
         from .models import RestaurantTable
         self.table = RestaurantTable.objects.create(number='12', seats=4, status='ready_to_bill')
         self.order = Order.objects.create(
