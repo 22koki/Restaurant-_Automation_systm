@@ -7,6 +7,8 @@ import { api } from "../services/api";
 const MenuItems = () => {
   const [items, setItems] = useState([]);
 
+  const removeItem = async (item) => { if (!window.confirm(`Delete ${item.name}? This cannot be undone.`)) return; try { await api.delete(`menu-items/${item.id}/`); setItems(current => current.filter(x => x.id !== item.id)); } catch (error) { const detail=error.response?.data?.detail; alert(detail || 'This item could not be deleted. It may already be used by an order. You can edit it and mark it unavailable instead.'); } };
+
   useEffect(() => {
     // Fetch your menu items from the backend API
     api.get("menu-items/")
@@ -60,7 +62,7 @@ const MenuItems = () => {
                     <Link to={`/edit-menu-item/${item.id}`} className="btn btn-sm btn-warning me-2">
                       ✏️ Edit
                     </Link>
-                    <button className="btn btn-sm btn-danger">
+                    <button className="btn btn-sm btn-danger" onClick={() => removeItem(item)}>
                       🗑️ Delete
                     </button>
                   </td>
