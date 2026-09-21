@@ -1,5 +1,6 @@
-from rest_framework import serializers
 from django.db import transaction
+from rest_framework import serializers
+
 from .models import (
     MenuItem, Order, OrderDetail, Ingredient, ItemIngredient,
     Inventory, PurchaseOrder, Invoice, Cheque
@@ -14,6 +15,9 @@ class MenuItemSerializer(serializers.ModelSerializer):
 
 class OrderDetailSerializer(serializers.ModelSerializer):
     menu_item_name = serializers.ReadOnlyField(source='menu_item.name')
+    subtotal = serializers.DecimalField(
+        max_digits=10, decimal_places=2, read_only=True
+    )
 
     class Meta:
         model = OrderDetail
@@ -22,23 +26,77 @@ class OrderDetailSerializer(serializers.ModelSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     order_details = OrderDetailSerializer(many=True, write_only=True)
-    details = OrderDetailSerializer(source='orderdetail_set', many=True, read_only=True)
+    details = OrderDetailSerializer(many=True, read_only=True)
+    total = serializers.DecimalField(
+        max_digits=10, decimal_places=2, read_only=True
+    )
 
     class Meta:
         model = Order
         fields = ['id', 'salesclerk', 'created_at', 'total', 'order_details', 'details']
+        read_only_fields = ['salesclerk', 'created_at', 'total']
 
     @transaction.atomic
     def create(self, validated_data):
         order_details_data = validated_data.pop('order_details')
-        order = Order.objects.create(**validated_data)
+        request = self.context.get('request')
+        salesclerk = (
+            request.user
+            if request and request.user and request.user.is_authenticated
+            else None
+        )
+        order = Order.objects.create(salesclerk=salesclerk, **validated_data)
 
         total = 0
 
         for detail_data in order_details_data:
             menu_item = detail_data['menu_item']
             quantity = detail_data['quantity']
+
+            if quantity <= 0:
+                raise serializers.ValidationError(
+                    {'order_details': 'Quantity must be greater than zero.'}
+                )
+
+            if not menu_item.available:
+                raise serializers.ValidationError(
+                    {'order_details': f'{menu_item.name} is currently unavailable.'}
+                )
+
             subtotal = menu_item.price * quantity
+
+            item_ingredients = ItemIngredient.objects.select_related(
+                'ingredient'
+            ).filter(menu_item=menu_item)
+
+            inventory_updates = []
+            for item_ingredient in item_ingredients:
+                total_required = item_ingredient.quantity_required * quantity
+
+                try:
+                    inventory = Inventory.objects.select_for_update().get(
+                        ingredient=item_ingredient.ingredient
+                    )
+                except Inventory.DoesNotExist:
+                    raise serializers.ValidationError(
+                        {
+                            'order_details':
+                            f'Inventory record missing for '
+                            f'{item_ingredient.ingredient.name}.'
+                        }
+                    )
+
+                if inventory.quantity_in_stock < total_required:
+                    raise serializers.ValidationError(
+                        {
+                            'order_details':
+                            f'Not enough stock for '
+                            f'{item_ingredient.ingredient.name}.'
+                        }
+                    )
+
+                inventory.quantity_in_stock -= total_required
+                inventory_updates.append(inventory)
 
             OrderDetail.objects.create(
                 order=order,
@@ -47,35 +105,25 @@ class OrderSerializer(serializers.ModelSerializer):
                 subtotal=subtotal
             )
 
+            for inventory in inventory_updates:
+                inventory.save(update_fields=['quantity_in_stock'])
+
             total += subtotal
 
-            # Deduct ingredients from inventory
-            item_ingredients = ItemIngredient.objects.filter(menu_item=menu_item)
-            for item_ingredient in item_ingredients:
-                total_required = item_ingredient.quantity_required * quantity
-
-                try:
-                    inventory = Inventory.objects.get(ingredient=item_ingredient.ingredient)
-                    if inventory.quantity_in_stock < total_required:
-                        raise serializers.ValidationError(
-                            f"Not enough stock for {item_ingredient.ingredient.name}."
-                        )
-                    inventory.quantity_in_stock -= total_required
-                    inventory.save()
-                except Inventory.DoesNotExist:
-                    raise serializers.ValidationError(
-                        f"Inventory record missing for ingredient {item_ingredient.ingredient.name}."
-                    )
-
         order.total = total
-        order.save()
+        order.save(update_fields=['total'])
         return order
 
 
 class IngredientSerializer(serializers.ModelSerializer):
+    threshold = serializers.SerializerMethodField()
+
     class Meta:
         model = Ingredient
-        fields = '__all__'
+        fields = ['id', 'name', 'unit', 'threshold']
+
+    def get_threshold(self, obj):
+        return obj.calculate_threshold()
 
 
 class ItemIngredientSerializer(serializers.ModelSerializer):
@@ -86,10 +134,22 @@ class ItemIngredientSerializer(serializers.ModelSerializer):
 
 class InventorySerializer(serializers.ModelSerializer):
     ingredient_name = serializers.ReadOnlyField(source='ingredient.name')
+    ingredient_unit = serializers.ReadOnlyField(source='ingredient.unit')
+    threshold = serializers.SerializerMethodField()
+    is_low_stock = serializers.SerializerMethodField()
 
     class Meta:
         model = Inventory
-        fields = ['id', 'ingredient', 'ingredient_name', 'quantity_in_stock', 'threshold']
+        fields = [
+            'id', 'ingredient', 'ingredient_name', 'ingredient_unit',
+            'quantity_in_stock', 'threshold', 'is_low_stock'
+        ]
+
+    def get_threshold(self, obj):
+        return obj.ingredient.calculate_threshold()
+
+    def get_is_low_stock(self, obj):
+        return obj.quantity_in_stock <= obj.ingredient.calculate_threshold()
 
 
 class PurchaseOrderSerializer(serializers.ModelSerializer):
@@ -101,16 +161,25 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
 
 
 class InvoiceSerializer(serializers.ModelSerializer):
-    purchase_order_info = serializers.StringRelatedField(source='purchase_order', read_only=True)
+    purchase_order_info = serializers.StringRelatedField(
+        source='purchase_order', read_only=True
+    )
 
     class Meta:
         model = Invoice
-        fields = ['id', 'purchase_order', 'purchase_order_info', 'quantity_received', 'price_per_unit', 'date']
+        fields = [
+            'id', 'purchase_order', 'purchase_order_info',
+            'quantity_received', 'received_at'
+        ]
+        read_only_fields = ['received_at']
 
 
 class ChequeSerializer(serializers.ModelSerializer):
-    invoice_info = serializers.StringRelatedField(source='invoice', read_only=True)
+    invoice_info = serializers.StringRelatedField(
+        source='invoice', read_only=True
+    )
 
     class Meta:
         model = Cheque
-        fields = ['id', 'invoice', 'invoice_info', 'amount', 'issued_date']
+        fields = ['id', 'invoice', 'invoice_info', 'amount', 'issued_at']
+        read_only_fields = ['issued_at']
