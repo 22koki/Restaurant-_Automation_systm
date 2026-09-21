@@ -11,6 +11,7 @@ import FloorPlan from './pages/FloorPlan';
 import Reservations from './pages/Reservations';
 import POS from './pages/POS';
 import RestaurantSetup from './pages/RestaurantSetup';
+import Staff from './pages/Staff';
 
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap-icons/font/bootstrap-icons.css';
@@ -38,6 +39,7 @@ function App() {
                 <Link className="nav-link" to="/floor">Floor</Link>
                 <Link className="nav-link" to="/reservations">Reservations</Link>
                 <Link className="nav-link" to="/orders">Orders</Link>
+                <Link className="nav-link" to="/staff">Staff</Link>
                 <Link className="nav-link" to="/kitchen">Kitchen</Link>
                 <Link className="nav-link" to="/service">Service</Link>
                 <Link className="nav-link" to="/menu">Customer Menu</Link>
@@ -58,6 +60,7 @@ function App() {
           <Route path="/floor" element={<FloorPlan />} />
           <Route path="/reservations" element={<Reservations />} />
           <Route path="/orders" element={<OrdersPage />} />
+          <Route path="/staff" element={<Staff />} />
           <Route path="/kitchen" element={<KitchenDisplay />} />
           <Route path="/service" element={<WaiterBoard />} />
         </Routes>
