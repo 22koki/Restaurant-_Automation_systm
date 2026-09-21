@@ -1,8 +1,9 @@
 from django.http import JsonResponse
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters, viewsets
+from rest_framework import filters, status, viewsets
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from django.db import transaction
 
 from .models import (
     MenuItem, Order, OrderDetail, Ingredient, ItemIngredient,
@@ -32,6 +33,63 @@ def ping(request):
     return JsonResponse({'message': 'pong'})
 
 
+@api_view(['POST'])
+@transaction.atomic
+def initial_setup(request):
+    table_count = int(request.data.get('table_count', 12))
+    seats_per_table = int(request.data.get('seats_per_table', 4))
+    area = request.data.get('area', 'Main Dining')
+    seed_demo_menu = bool(request.data.get('seed_demo_menu', True))
+
+    if table_count < 1 or table_count > 100:
+        return Response(
+            {'table_count': 'Choose between 1 and 100 tables.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    created_tables = 0
+    for number in range(1, table_count + 1):
+        _, created = RestaurantTable.objects.get_or_create(
+            number=str(number),
+            defaults={
+                'seats': seats_per_table,
+                'area': area,
+                'status': 'available',
+                'active': True,
+            }
+        )
+        created_tables += int(created)
+
+    created_menu_items = 0
+    if seed_demo_menu:
+        starter_menu = [
+            ('Fire-Grilled Chicken', 'Chef Favourites', 'Herb butter, charred lemon and garden greens.', 1450, 'grill'),
+            ('Truffle Mushroom Pasta', 'Pasta', 'Wild mushrooms, parmesan, cream and herbs.', 1280, 'kitchen'),
+            ('Garden Burrata', 'Small Plates', 'Tomatoes, basil oil, toasted sourdough and sea salt.', 980, 'kitchen'),
+            ('Smash Burger', 'Burgers', 'Beef patty, cheddar, pickles and house sauce.', 1250, 'grill'),
+            ('Crispy Calamari', 'Small Plates', 'Lemon, chilli and garlic aioli.', 1100, 'kitchen'),
+            ('Passion Mojito', 'Drinks', 'Passion fruit, lime and fresh mint.', 650, 'bar'),
+        ]
+        for name, category, description, price, station in starter_menu:
+            _, created = MenuItem.objects.get_or_create(
+                name=name,
+                defaults={
+                    'category': category,
+                    'description': description,
+                    'price': price,
+                    'prep_station': station,
+                    'available': True,
+                }
+            )
+            created_menu_items += int(created)
+
+    return Response({
+        'tables_created': created_tables,
+        'menu_items_created': created_menu_items,
+        'message': 'Restaurant setup completed.'
+    })
+
+
 class PaymentViewSet(viewsets.ModelViewSet):
     queryset = Payment.objects.select_related('order', 'order__table').order_by('-created_at')
     serializer_class = PaymentSerializer
@@ -55,7 +113,7 @@ class MenuItemViewSet(viewsets.ModelViewSet):
 class OrderViewSet(viewsets.ModelViewSet):
     queryset = Order.objects.prefetch_related(
         'details__menu_item'
-    ).select_related('salesclerk').order_by('-created_at')
+    ).select_related('salesclerk', 'table').order_by('-created_at')
     serializer_class = OrderSerializer
 
 
