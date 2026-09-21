@@ -257,6 +257,52 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
     ).order_by('-created_at')
     serializer_class = PurchaseOrderSerializer
 
+    @action(detail=True, methods=['post'])
+    @transaction.atomic
+    def receive(self, request, pk=None):
+        purchase_order = self.get_object()
+        if purchase_order.status.lower() == 'received':
+            return Response(
+                {'detail': 'This purchase order has already been received.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            quantity_received = float(
+                request.data.get('quantity_received', purchase_order.quantity_ordered)
+            )
+        except (TypeError, ValueError):
+            return Response(
+                {'quantity_received': 'Enter a valid quantity.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if quantity_received <= 0:
+            return Response(
+                {'quantity_received': 'Quantity received must be greater than zero.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        inventory, _ = Inventory.objects.select_for_update().get_or_create(
+            ingredient=purchase_order.ingredient,
+            defaults={'quantity_in_stock': 0}
+        )
+        inventory.quantity_in_stock += quantity_received
+        inventory.save(update_fields=['quantity_in_stock'])
+
+        invoice, _ = Invoice.objects.get_or_create(
+            purchase_order=purchase_order,
+            defaults={'quantity_received': quantity_received}
+        )
+        purchase_order.status = 'Received'
+        purchase_order.save(update_fields=['status'])
+
+        return Response({
+            'purchase_order': PurchaseOrderSerializer(purchase_order).data,
+            'invoice': InvoiceSerializer(invoice).data,
+            'quantity_in_stock': inventory.quantity_in_stock,
+        })
+
 
 class InvoiceViewSet(viewsets.ModelViewSet):
     permission_classes = [InventoryPermission]
