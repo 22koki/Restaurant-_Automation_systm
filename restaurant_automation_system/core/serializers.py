@@ -29,17 +29,18 @@ class ReservationSerializer(serializers.ModelSerializer):
 
 class OrderDetailSerializer(serializers.ModelSerializer):
     menu_item_name = serializers.ReadOnlyField(source='menu_item.name')
+    prep_station = serializers.ReadOnlyField(source='menu_item.prep_station')
     subtotal = serializers.DecimalField(
         max_digits=10, decimal_places=2, read_only=True
     )
 
     class Meta:
         model = OrderDetail
-        fields = ['id', 'menu_item', 'menu_item_name', 'quantity', 'subtotal', 'notes', 'status']
+        fields = ['id', 'menu_item', 'menu_item_name', 'prep_station', 'quantity', 'subtotal', 'notes', 'status']
 
 
 class OrderSerializer(serializers.ModelSerializer):
-    order_details = OrderDetailSerializer(many=True, write_only=True)
+    order_details = OrderDetailSerializer(many=True, write_only=True, required=False)
     details = OrderDetailSerializer(many=True, read_only=True)
     total = serializers.DecimalField(
         max_digits=10, decimal_places=2, read_only=True
@@ -56,13 +57,16 @@ class OrderSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        order_details_data = validated_data.pop('order_details')
+        order_details_data = validated_data.pop('order_details', [])
         request = self.context.get('request')
         salesclerk = (
             request.user
             if request and request.user and request.user.is_authenticated
             else None
         )
+        if not order_details_data:
+            raise serializers.ValidationError({'order_details': 'Add at least one item.'})
+
         order = Order.objects.create(salesclerk=salesclerk, **validated_data)
 
         total = 0
