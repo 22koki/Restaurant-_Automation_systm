@@ -5,10 +5,13 @@ from .views import (
     ping,
     MenuItemViewSet, OrderViewSet, OrderDetailViewSet,
     IngredientViewSet, ItemIngredientViewSet, InventoryViewSet,
-    PurchaseOrderViewSet, InvoiceViewSet, ChequeViewSet
+    PurchaseOrderViewSet, InvoiceViewSet, ChequeViewSet,
+    RestaurantTableViewSet, ReservationViewSet
 )
 
 router = DefaultRouter()
+router.register(r'tables', RestaurantTableViewSet)
+router.register(r'reservations', ReservationViewSet)
 router.register(r'menu-items', MenuItemViewSet)
 router.register(r'orders', OrderViewSet)
 router.register(r'order-details', OrderDetailViewSet)
@@ -23,4 +26,5 @@ urlpatterns = [
     path('api/', include(router.urls)),
     path('api/low-stock/', views.low_stock_alerts),
     path('api/ping/', views.ping),
+    path('api/menu-card/', views.menu_card),
 ]

@@ -6,12 +6,13 @@ from rest_framework.response import Response
 
 from .models import (
     MenuItem, Order, OrderDetail, Ingredient, ItemIngredient,
-    Inventory, PurchaseOrder, Invoice, Cheque
+    Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation
 )
 from .serializers import (
     MenuItemSerializer, OrderSerializer, OrderDetailSerializer,
     IngredientSerializer, ItemIngredientSerializer, InventorySerializer,
-    PurchaseOrderSerializer, InvoiceSerializer, ChequeSerializer
+    PurchaseOrderSerializer, InvoiceSerializer, ChequeSerializer,
+    RestaurantTableSerializer, ReservationSerializer
 )
 
 
@@ -29,6 +30,16 @@ def low_stock_alerts(request):
 
 def ping(request):
     return JsonResponse({'message': 'pong'})
+
+
+class RestaurantTableViewSet(viewsets.ModelViewSet):
+    queryset = RestaurantTable.objects.all().order_by('number')
+    serializer_class = RestaurantTableSerializer
+
+
+class ReservationViewSet(viewsets.ModelViewSet):
+    queryset = Reservation.objects.select_related('table').order_by('-reservation_at')
+    serializer_class = ReservationSerializer
 
 
 class MenuItemViewSet(viewsets.ModelViewSet):

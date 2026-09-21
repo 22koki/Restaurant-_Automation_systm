@@ -2,14 +2,14 @@
 import React, { useEffect, useState } from "react";
 import "./MenuItems.css";
 import { Link } from "react-router-dom";
-import axios from "axios";
+import { api } from "../services/api";
 
 const MenuItems = () => {
   const [items, setItems] = useState([]);
 
   useEffect(() => {
     // Fetch your menu items from the backend API
-    axios.get("http://localhost:8000/api/menu-items/")
+    api.get("menu-items/")
 
       .then((response) => {
         setItems(response.data);

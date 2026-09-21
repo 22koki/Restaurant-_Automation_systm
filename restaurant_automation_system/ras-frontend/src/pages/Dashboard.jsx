@@ -1,72 +1,44 @@
-// src/pages/Dashboard.jsx
 import React from 'react';
 import { Link } from 'react-router-dom';
-import 'bootstrap-icons/font/bootstrap-icons.css';
-import './Dashboard.css'; // Custom styles
+import './Dashboard.css';
+
+const modules = [
+  { to: '/orders', icon: 'bi-receipt-cutoff', title: 'Live Orders', text: 'Follow every ticket from confirmation to service.' },
+  { to: '/menu-items', icon: 'bi-journal-richtext', title: 'Menu Studio', text: 'Manage dishes, pricing, availability and prep stations.' },
+  { to: '/menu', icon: 'bi-phone', title: 'Guest Experience', text: 'Preview the mobile-first menu your customers will use.' },
+  { to: '/inventory', icon: 'bi-box-seam', title: 'Inventory', text: 'Track ingredients, usage and low-stock risk.' },
+  { to: '/tables', icon: 'bi-grid-3x3-gap', title: 'Tables', text: 'See availability, occupied tables and service state.' },
+  { to: '/reservations', icon: 'bi-calendar2-check', title: 'Reservations', text: 'Manage upcoming guests, party sizes and seating.' },
+];
 
 function Dashboard() {
   return (
-    <div className="dashboard-container">
-      <header className="text-center mb-5">
-        <h1 className="dashboard-title">
-          🍽️ Welcome to <span className="highlight">RestoPro</span> Dashboard
-        </h1>
-        <p className="lead">Your central hub for managing orders, inventory, and reports</p>
-      </header>
+    <div className="ops-shell">
+      <section className="ops-hero">
+        <div>
+          <span className="eyebrow">Restaurant command centre</span>
+          <h1>Good service starts with a calm, clear view.</h1>
+          <p>Orders, tables, kitchen flow, inventory and guests — connected in one operating system.</p>
+        </div>
+        <Link to="/menu" className="guest-preview">Open guest menu <i className="bi bi-arrow-up-right" /></Link>
+      </section>
 
-      <div className="row g-4 justify-content-center">
+      <section className="ops-status">
+        <div><span>Open orders</span><strong>—</strong><small>Live API data next</small></div>
+        <div><span>Tables in service</span><strong>—</strong><small>Floor view ready for wiring</small></div>
+        <div><span>Kitchen queue</span><strong>—</strong><small>Ticket workflow prepared</small></div>
+        <div><span>Low stock</span><strong>—</strong><small>Inventory alerts available</small></div>
+      </section>
 
-        <Link to="/menu-items" className="col-md-4 text-decoration-none">
-          <div className="card dashboard-card shadow-sm">
-            <div className="card-body text-center">
-              <i className="bi bi-card-list icon-large"></i>
-              <h5 className="card-title mt-3">Menu Items</h5>
-              <p className="card-text">Manage and update all your restaurant menu items.</p>
-            </div>
-          </div>
-        </Link>
-
-        <Link to="/orders" className="col-md-4 text-decoration-none">
-          <div className="card dashboard-card shadow-sm">
-            <div className="card-body text-center">
-              <i className="bi bi-receipt-cutoff icon-large"></i>
-              <h5 className="card-title mt-3">Orders</h5>
-              <p className="card-text">Track current and historical customer orders.</p>
-            </div>
-          </div>
-        </Link>
-
-        <Link to="/inventory" className="col-md-4 text-decoration-none">
-          <div className="card dashboard-card shadow-sm">
-            <div className="card-body text-center">
-              <i className="bi bi-box-seam icon-large"></i>
-              <h5 className="card-title mt-3">Inventory</h5>
-              <p className="card-text">View and manage ingredient stocks.</p>
-            </div>
-          </div>
-        </Link>
-
-        <Link to="/reports" className="col-md-4 text-decoration-none">
-          <div className="card dashboard-card shadow-sm">
-            <div className="card-body text-center">
-              <i className="bi bi-bar-chart-line icon-large"></i>
-              <h5 className="card-title mt-3">Reports</h5>
-              <p className="card-text">Access detailed reports and sales summaries.</p>
-            </div>
-          </div>
-        </Link>
-
-        <Link to="/cheques" className="col-md-4 text-decoration-none">
-          <div className="card dashboard-card shadow-sm">
-            <div className="card-body text-center">
-              <i className="bi bi-printer icon-large"></i>
-              <h5 className="card-title mt-3">Cheque Printing</h5>
-              <p className="card-text">Print payment cheques for your records.</p>
-            </div>
-          </div>
-        </Link>
-
-      </div>
+      <section className="ops-modules">
+        {modules.map((module) => (
+          <Link to={module.to} className="ops-module" key={module.title}>
+            <i className={`bi ${module.icon}`} />
+            <div><h3>{module.title}</h3><p>{module.text}</p></div>
+            <i className="bi bi-arrow-right arrow" />
+          </Link>
+        ))}
+      </section>
     </div>
   );
 }

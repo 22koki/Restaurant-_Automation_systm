@@ -3,13 +3,27 @@ from rest_framework import serializers
 
 from .models import (
     MenuItem, Order, OrderDetail, Ingredient, ItemIngredient,
-    Inventory, PurchaseOrder, Invoice, Cheque
+    Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation
 )
 
 
 class MenuItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = MenuItem
+        fields = '__all__'
+
+
+class RestaurantTableSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RestaurantTable
+        fields = '__all__'
+
+
+class ReservationSerializer(serializers.ModelSerializer):
+    table_number = serializers.ReadOnlyField(source='table.number')
+
+    class Meta:
+        model = Reservation
         fields = '__all__'
 
 
@@ -21,7 +35,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OrderDetail
-        fields = ['id', 'menu_item', 'menu_item_name', 'quantity', 'subtotal']
+        fields = ['id', 'menu_item', 'menu_item_name', 'quantity', 'subtotal', 'notes', 'status']
 
 
 class OrderSerializer(serializers.ModelSerializer):
@@ -33,8 +47,12 @@ class OrderSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Order
-        fields = ['id', 'salesclerk', 'created_at', 'total', 'order_details', 'details']
-        read_only_fields = ['salesclerk', 'created_at', 'total']
+        fields = [
+            'id', 'salesclerk', 'table', 'order_type', 'status',
+            'customer_name', 'customer_phone', 'notes', 'created_at',
+            'updated_at', 'total', 'order_details', 'details'
+        ]
+        read_only_fields = ['salesclerk', 'created_at', 'updated_at', 'total']
 
     @transaction.atomic
     def create(self, validated_data):
@@ -52,6 +70,7 @@ class OrderSerializer(serializers.ModelSerializer):
         for detail_data in order_details_data:
             menu_item = detail_data['menu_item']
             quantity = detail_data['quantity']
+            notes = detail_data.get('notes', '')
 
             if quantity <= 0:
                 raise serializers.ValidationError(
@@ -102,7 +121,8 @@ class OrderSerializer(serializers.ModelSerializer):
                 order=order,
                 menu_item=menu_item,
                 quantity=quantity,
-                subtotal=subtotal
+                subtotal=subtotal,
+                notes=notes
             )
 
             for inventory in inventory_updates:
