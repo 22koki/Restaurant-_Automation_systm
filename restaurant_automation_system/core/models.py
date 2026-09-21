@@ -90,20 +90,6 @@ class Reservation(models.Model):
     email = models.EmailField(blank=True)
     party_size = models.PositiveIntegerField()
     reservation_at = models.DateTimeField()
-    waiter = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='waiter_orders'
-    )
-    cashier = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='cashier_orders'
-    )
     table = models.ForeignKey(
         RestaurantTable,
         on_delete=models.SET_NULL,
@@ -146,6 +132,20 @@ class Order(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True
+    )
+    waiter = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='waiter_orders'
+    )
+    cashier = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='cashier_orders'
     )
     table = models.ForeignKey(
         RestaurantTable,
