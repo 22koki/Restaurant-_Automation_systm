@@ -3,7 +3,7 @@ from rest_framework import serializers
 
 from .models import (
     MenuItem, Order, OrderDetail, Ingredient, ItemIngredient,
-    Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation
+    Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation, Payment
 )
 
 
@@ -207,3 +207,49 @@ class ChequeSerializer(serializers.ModelSerializer):
         model = Cheque
         fields = ['id', 'invoice', 'invoice_info', 'amount', 'issued_at']
         read_only_fields = ['issued_at']
+
+
+class PaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = '__all__'
+        read_only_fields = ['created_at', 'paid_at']
+
+    @transaction.atomic
+    def create(self, validated_data):
+        from django.utils import timezone
+
+        order = validated_data['order']
+        amount = validated_data['amount']
+
+        if amount <= 0:
+            raise serializers.ValidationError({'amount': 'Payment must be greater than zero.'})
+
+        paid_total = sum(
+            payment.amount
+            for payment in order.payments.filter(status='paid')
+        )
+        outstanding = order.total - paid_total
+        if amount > outstanding:
+            raise serializers.ValidationError(
+                {'amount': f'Payment exceeds outstanding balance of {outstanding}.'}
+            )
+
+        if validated_data.get('method') in ('cash', 'card'):
+            validated_data['status'] = 'paid'
+            validated_data['paid_at'] = timezone.now()
+
+        payment = Payment.objects.create(**validated_data)
+
+        paid_total += payment.amount if payment.status == 'paid' else 0
+        if paid_total >= order.total:
+            order.status = 'completed'
+            order.save(update_fields=['status', 'updated_at'])
+            if order.table:
+                order.table.status = 'cleaning'
+                order.table.save(update_fields=['status'])
+        else:
+            order.status = 'awaiting_payment'
+            order.save(update_fields=['status', 'updated_at'])
+
+        return payment
