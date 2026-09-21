@@ -11,7 +11,7 @@ from .models import (
 class StaffProfileSerializer(serializers.ModelSerializer):
     username = serializers.ReadOnlyField(source='user.username')
     first_name = serializers.CharField(source='user.first_name')
-    last_name = serializers.CharField(source='user.last_name')
+    last_name = serializers.CharField(source='user.last_name', required=False, allow_blank=True)
     email = serializers.EmailField(source='user.email', required=False, allow_blank=True)
 
     class Meta:
@@ -25,11 +25,13 @@ class StaffProfileSerializer(serializers.ModelSerializer):
         password = self.initial_data.get('password', '')
         if not username:
             raise serializers.ValidationError({'username': 'Username is required.'})
+        if not password:
+            raise serializers.ValidationError({'password': 'Password is required.'})
         if User.objects.filter(username=username).exists():
             raise serializers.ValidationError({'username': 'This username is already in use.'})
         user = User.objects.create_user(
             username=username,
-            password=password or User.objects.make_random_password(),
+            password=password,
             first_name=user_data.get('first_name', ''),
             last_name=user_data.get('last_name', ''),
             email=user_data.get('email', '')
@@ -285,10 +287,13 @@ class ChequeSerializer(serializers.ModelSerializer):
 
 
 class PaymentSerializer(serializers.ModelSerializer):
+    order_total = serializers.ReadOnlyField(source='order.total')
+    order_table = serializers.ReadOnlyField(source='order.table.number')
+
     class Meta:
         model = Payment
         fields = '__all__'
-        read_only_fields = ['created_at', 'paid_at']
+        read_only_fields = ['created_at', 'paid_at', 'status']
 
     @transaction.atomic
     def create(self, validated_data):
@@ -310,7 +315,10 @@ class PaymentSerializer(serializers.ModelSerializer):
                 {'amount': f'Payment exceeds outstanding balance of {outstanding}.'}
             )
 
-        if validated_data.get('method') in ('cash', 'card'):
+        method = validated_data.get('method')
+        if method == 'mpesa':
+            validated_data['status'] = 'pending'
+        elif method in ('cash', 'card'):
             validated_data['status'] = 'paid'
             validated_data['paid_at'] = timezone.now()
 
