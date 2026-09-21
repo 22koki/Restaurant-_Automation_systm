@@ -2,6 +2,29 @@ from django.contrib.auth.models import User
 from django.db import models
 
 
+class StaffProfile(models.Model):
+    ROLE_CHOICES = [
+        ('owner', 'Owner'),
+        ('manager', 'Manager'),
+        ('cashier', 'Cashier'),
+        ('waiter', 'Waiter'),
+        ('kitchen', 'Kitchen'),
+        ('storekeeper', 'Storekeeper'),
+    ]
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='staff_profile'
+    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+    phone = models.CharField(max_length=40, blank=True)
+    active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f'{self.user.get_full_name() or self.user.username} - {self.role}'
+
+
 class MenuItem(models.Model):
     STATION_CHOICES = [
         ('kitchen', 'Kitchen'),
@@ -67,6 +90,20 @@ class Reservation(models.Model):
     email = models.EmailField(blank=True)
     party_size = models.PositiveIntegerField()
     reservation_at = models.DateTimeField()
+    waiter = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='waiter_orders'
+    )
+    cashier = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='cashier_orders'
+    )
     table = models.ForeignKey(
         RestaurantTable,
         on_delete=models.SET_NULL,
