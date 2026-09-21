@@ -16,10 +16,18 @@ function CustomerMenu() {
   const [checkout, setCheckout] = useState(false);
   const [placing, setPlacing] = useState(false);
   const [confirmation, setConfirmation] = useState(null);
+  const [tables, setTables] = useState([]);
+  const [orderError, setOrderError] = useState('');
   const [form, setForm] = useState({ order_type: 'dine_in', table: '', customer_name: '', customer_phone: '', notes: '' });
 
   useEffect(() => {
-    api.get('menu-items/').then(({ data }) => setItems(data.filter((item) => item.available))).catch(() => setItems(fallback)).finally(() => setLoading(false));
+    Promise.all([api.get('menu-items/'), api.get('tables/')])
+      .then(([menuResponse, tableResponse]) => {
+        setItems(menuResponse.data.filter((item) => item.available));
+        setTables(tableResponse.data.filter((table) => table.active));
+      })
+      .catch(() => setItems(fallback))
+      .finally(() => setLoading(false));
   }, []);
 
   const displayItems = items.length ? items : fallback;
@@ -44,6 +52,7 @@ function CustomerMenu() {
       return;
     }
     setPlacing(true);
+    setOrderError('');
     try {
       const payload = {
         order_type: form.order_type,
@@ -58,7 +67,13 @@ function CustomerMenu() {
       setCart([]);
       setCheckout(false);
     } catch (error) {
-      alert(error.response?.data?.order_details || 'We could not place the order. Please ask a team member for help.');
+      const data = error.response?.data;
+      const message = data
+        ? Object.entries(data)
+            .map(([field, value]) => field + ': ' + (Array.isArray(value) ? value.join(' ') : String(value)))
+            .join(' ')
+        : 'We could not place the order. Please ask a team member for help.';
+      setOrderError(message);
     } finally {
       setPlacing(false);
     }
@@ -73,7 +88,10 @@ function CustomerMenu() {
 
       {cart.length > 0 && <div className="floating-order"><div><small>{cart.length} {cart.length === 1 ? 'item' : 'items'}</small><strong>KSh {total.toLocaleString()}</strong></div><button onClick={() => setCheckout(true)}>View order <i className="bi bi-arrow-right"/></button></div>}
 
-      {checkout && <div className="checkout-backdrop" onClick={() => setCheckout(false)}><aside className="checkout-panel" onClick={(e) => e.stopPropagation()}><button className="checkout-close" onClick={() => setCheckout(false)}><i className="bi bi-x-lg"/></button><span className="hero-kicker">Your table</span><h2>Almost ready.</h2><div className="cart-lines">{groupedCart.map((item) => <div className="cart-line" key={item.id}><div><strong>{item.quantity} × {item.name}</strong><small>KSh {(Number(item.price) * item.quantity).toLocaleString()}</small></div><button onClick={() => removeOne(item.id)}>−</button></div>)}</div><div className="cart-total"><span>Total</span><strong>KSh {total.toLocaleString()}</strong></div><form onSubmit={placeOrder}><div className="order-type"><button type="button" className={form.order_type === 'dine_in' ? 'active' : ''} onClick={() => setForm({...form, order_type:'dine_in'})}>Dine in</button><button type="button" className={form.order_type === 'takeaway' ? 'active' : ''} onClick={() => setForm({...form, order_type:'takeaway', table:''})}>Takeaway</button></div>{form.order_type === 'dine_in' && <input placeholder="Table ID / scan from table QR" value={form.table} onChange={(e) => setForm({...form, table:e.target.value})} required/>}<input placeholder="Your name" value={form.customer_name} onChange={(e) => setForm({...form, customer_name:e.target.value})}/><input placeholder="Phone number" value={form.customer_phone} onChange={(e) => setForm({...form, customer_phone:e.target.value})}/><textarea placeholder="Anything we should know? Allergies, timing, special request…" value={form.notes} onChange={(e) => setForm({...form, notes:e.target.value})}/><button className="place-order" disabled={placing}>{placing ? 'Sending to kitchen…' : 'Place order'}</button></form></aside></div>}
+      {checkout && <div className="checkout-backdrop" onClick={() => setCheckout(false)}><aside className="checkout-panel" onClick={(e) => e.stopPropagation()}><button className="checkout-close" onClick={() => setCheckout(false)}><i className="bi bi-x-lg"/></button><span className="hero-kicker">Your table</span><h2>Almost ready.</h2><div className="cart-lines">{groupedCart.map((item) => <div className="cart-line" key={item.id}><div><strong>{item.quantity} × {item.name}</strong><small>KSh {(Number(item.price) * item.quantity).toLocaleString()}</small></div><button onClick={() => removeOne(item.id)}>−</button></div>)}</div><div className="cart-total"><span>Total</span><strong>KSh {total.toLocaleString()}</strong></div><form onSubmit={placeOrder}><div className="order-type"><button type="button" className={form.order_type === 'dine_in' ? 'active' : ''} onClick={() => setForm({...form, order_type:'dine_in'})}>Dine in</button><button type="button" className={form.order_type === 'takeaway' ? 'active' : ''} onClick={() => setForm({...form, order_type:'takeaway', table:''})}>Takeaway</button></div>{form.order_type === 'dine_in' && <select value={form.table} onChange={(e) => setForm({...form, table:e.target.value})} required>
+  <option value="">Choose your table</option>
+  {tables.map((table) => <option key={table.id} value={table.id}>Table {table.number} · {table.seats} seats</option>)}
+</select>}<input placeholder="Your name" value={form.customer_name} onChange={(e) => setForm({...form, customer_name:e.target.value})}/><input placeholder="Phone number" value={form.customer_phone} onChange={(e) => setForm({...form, customer_phone:e.target.value})}/><textarea placeholder="Anything we should know? Allergies, timing, special request…" value={form.notes} onChange={(e) => setForm({...form, notes:e.target.value})}/><button className="place-order" disabled={placing}>{placing ? 'Sending to kitchen…' : 'Place order'}</button>{orderError && <div className="order-error">{orderError}</div>}</form></aside></div>}
 
       {confirmation && <div className="confirmation-toast"><i className="bi bi-check2-circle"/><div><strong>Order #{confirmation.id} is in.</strong><span>The kitchen has received it. We’ll take it from here.</span></div><button onClick={() => setConfirmation(null)}>×</button></div>}
     </div>
