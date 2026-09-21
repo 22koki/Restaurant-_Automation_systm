@@ -144,6 +144,14 @@ class OrderSerializer(serializers.ModelSerializer):
         if not order_details_data:
             raise serializers.ValidationError({'order_details': 'Add at least one item.'})
 
+        if salesclerk:
+            profile = getattr(salesclerk, 'staff_profile', None)
+            if profile and profile.active:
+                if profile.role == 'cashier' and not validated_data.get('cashier'):
+                    validated_data['cashier'] = salesclerk
+                if profile.role == 'waiter' and not validated_data.get('waiter'):
+                    validated_data['waiter'] = salesclerk
+
         order = Order.objects.create(salesclerk=salesclerk, **validated_data)
 
         total = 0
@@ -213,6 +221,11 @@ class OrderSerializer(serializers.ModelSerializer):
 
         order.total = total
         order.save(update_fields=['total'])
+
+        if order.table:
+            order.table.status = 'preparing'
+            order.table.save(update_fields=['status'])
+
         return order
 
 
