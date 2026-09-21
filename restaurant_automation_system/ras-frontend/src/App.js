@@ -10,6 +10,7 @@ import WaiterBoard from './pages/WaiterBoard';
 import FloorPlan from './pages/FloorPlan';
 import Reservations from './pages/Reservations';
 import POS from './pages/POS';
+import RestaurantSetup from './pages/RestaurantSetup';
 
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap-icons/font/bootstrap-icons.css';
@@ -53,6 +54,7 @@ function App() {
           <Route path="/menu-items" element={<MenuItemsPage />} />
           <Route path="/add-menu-item" element={<AddMenuItem />} />
           <Route path="/pos" element={<POS />} />
+        <Route path="/setup" element={<RestaurantSetup />} />
           <Route path="/floor" element={<FloorPlan />} />
           <Route path="/reservations" element={<Reservations />} />
           <Route path="/orders" element={<OrdersPage />} />
