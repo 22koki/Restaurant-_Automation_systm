@@ -57,6 +57,9 @@ class OrderApiTests(APITestCase):
 
         self.beef_inventory.refresh_from_db()
         self.assertEqual(self.beef_inventory.quantity_in_stock, 640)
+        from .models import IngredientUsage
+        usage = IngredientUsage.objects.get(ingredient=self.beef)
+        self.assertEqual(usage.quantity_used, 360)
 
     def test_order_rolls_back_when_stock_is_insufficient(self):
         response = self.client.post(
