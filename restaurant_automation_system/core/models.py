@@ -14,6 +14,7 @@ class MenuItem(models.Model):
     description = models.TextField(blank=True)
     category = models.CharField(max_length=80, default='Mains')
     image_url = models.URLField(blank=True)
+    image = models.ImageField(upload_to='menu_items/', blank=True, null=True)
     price = models.DecimalField(max_digits=8, decimal_places=2)
     available = models.BooleanField(default=True)
     prep_station = models.CharField(
