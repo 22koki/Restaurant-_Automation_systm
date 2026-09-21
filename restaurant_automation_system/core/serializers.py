@@ -1,10 +1,48 @@
 from django.db import transaction
+from django.contrib.auth.models import User
 from rest_framework import serializers
 
 from .models import (
     MenuItem, Order, OrderDetail, Ingredient, ItemIngredient,
-    Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation, Payment
+    Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation, Payment, StaffProfile
 )
+
+
+class StaffProfileSerializer(serializers.ModelSerializer):
+    username = serializers.ReadOnlyField(source='user.username')
+    first_name = serializers.CharField(source='user.first_name')
+    last_name = serializers.CharField(source='user.last_name')
+    email = serializers.EmailField(source='user.email', required=False, allow_blank=True)
+
+    class Meta:
+        model = StaffProfile
+        fields = ['id', 'user', 'username', 'first_name', 'last_name', 'email', 'phone', 'role', 'active']
+        read_only_fields = ['user', 'username']
+
+    def create(self, validated_data):
+        user_data = validated_data.pop('user')
+        username = self.initial_data.get('username', '').strip()
+        password = self.initial_data.get('password', '')
+        if not username:
+            raise serializers.ValidationError({'username': 'Username is required.'})
+        if User.objects.filter(username=username).exists():
+            raise serializers.ValidationError({'username': 'This username is already in use.'})
+        user = User.objects.create_user(
+            username=username,
+            password=password or User.objects.make_random_password(),
+            first_name=user_data.get('first_name', ''),
+            last_name=user_data.get('last_name', ''),
+            email=user_data.get('email', '')
+        )
+        return StaffProfile.objects.create(user=user, **validated_data)
+
+    def update(self, instance, validated_data):
+        user_data = validated_data.pop('user', {})
+        for field in ('first_name', 'last_name', 'email'):
+            if field in user_data:
+                setattr(instance.user, field, user_data[field])
+        instance.user.save()
+        return super().update(instance, validated_data)
 
 
 class MenuItemSerializer(serializers.ModelSerializer):
@@ -53,6 +91,8 @@ class OrderSerializer(serializers.ModelSerializer):
     salesclerk_name = serializers.SerializerMethodField()
     salesclerk_roles = serializers.SerializerMethodField()
     table_number = serializers.ReadOnlyField(source='table.number')
+    waiter_name = serializers.SerializerMethodField()
+    cashier_name = serializers.SerializerMethodField()
     details = OrderDetailSerializer(many=True, read_only=True)
     total = serializers.DecimalField(
         max_digits=10, decimal_places=2, read_only=True
@@ -62,7 +102,8 @@ class OrderSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             'id', 'salesclerk', 'salesclerk_username', 'salesclerk_name',
-            'salesclerk_roles', 'table', 'table_number', 'order_type', 'status',
+            'salesclerk_roles', 'waiter', 'waiter_name', 'cashier', 'cashier_name',
+            'table', 'table_number', 'order_type', 'status',
             'customer_name', 'customer_phone', 'notes', 'created_at',
             'updated_at', 'total', 'order_details', 'details'
         ]
@@ -73,6 +114,16 @@ class OrderSerializer(serializers.ModelSerializer):
             return ''
         full_name = obj.salesclerk.get_full_name().strip()
         return full_name or obj.salesclerk.username
+
+    def get_waiter_name(self, obj):
+        if not obj.waiter:
+            return ''
+        return obj.waiter.get_full_name().strip() or obj.waiter.username
+
+    def get_cashier_name(self, obj):
+        if not obj.cashier:
+            return ''
+        return obj.cashier.get_full_name().strip() or obj.cashier.username
 
     def get_salesclerk_roles(self, obj):
         if not obj.salesclerk:
