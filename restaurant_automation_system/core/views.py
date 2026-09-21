@@ -1,96 +1,121 @@
-from rest_framework import viewsets, filters
+from django.http import JsonResponse
 from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import filters, viewsets
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from django.http import JsonResponse
-from django.db import models
-from django.db.models import F  # <-- ✅ Add this
 
 from .models import (
     MenuItem, Order, OrderDetail, Ingredient, ItemIngredient,
     Inventory, PurchaseOrder, Invoice, Cheque
 )
-
 from .serializers import (
     MenuItemSerializer, OrderSerializer, OrderDetailSerializer,
     IngredientSerializer, ItemIngredientSerializer, InventorySerializer,
     PurchaseOrderSerializer, InvoiceSerializer, ChequeSerializer
 )
+
+
 @api_view(['GET'])
 def low_stock_alerts(request):
-    low_stock_items = Inventory.objects.filter(quantity_in_stock__lte=F('ingredient__threshold'))
+    inventory_items = Inventory.objects.select_related('ingredient').all()
+    low_stock_items = [
+        item
+        for item in inventory_items
+        if item.quantity_in_stock <= item.ingredient.calculate_threshold()
+    ]
     serializer = InventorySerializer(low_stock_items, many=True)
     return Response(serializer.data)
 
+
 def ping(request):
-    return JsonResponse({"message": "pong"})
+    return JsonResponse({'message': 'pong'})
 
 
 class MenuItemViewSet(viewsets.ModelViewSet):
-    queryset = MenuItem.objects.all()
+    queryset = MenuItem.objects.all().order_by('name')
     serializer_class = MenuItemSerializer
 
 
 class OrderViewSet(viewsets.ModelViewSet):
-    queryset = Order.objects.all()
+    queryset = Order.objects.prefetch_related(
+        'details__menu_item'
+    ).select_related('salesclerk').order_by('-created_at')
     serializer_class = OrderSerializer
 
 
 class OrderDetailViewSet(viewsets.ModelViewSet):
-    queryset = OrderDetail.objects.all()
+    queryset = OrderDetail.objects.select_related('order', 'menu_item').all()
     serializer_class = OrderDetailSerializer
 
 
 class IngredientViewSet(viewsets.ModelViewSet):
-    queryset = Ingredient.objects.all()
+    queryset = Ingredient.objects.all().order_by('name')
     serializer_class = IngredientSerializer
 
 
 class ItemIngredientViewSet(viewsets.ModelViewSet):
-    queryset = ItemIngredient.objects.all()
+    queryset = ItemIngredient.objects.select_related(
+        'menu_item', 'ingredient'
+    ).all()
     serializer_class = ItemIngredientSerializer
 
 
 class InventoryViewSet(viewsets.ModelViewSet):
-    queryset = Inventory.objects.all()
+    queryset = Inventory.objects.select_related('ingredient').all()
     serializer_class = InventorySerializer
-    filter_backends = [DjangoFilterBackend, filters.OrderingFilter, filters.SearchFilter]
+    filter_backends = [
+        DjangoFilterBackend,
+        filters.OrderingFilter,
+        filters.SearchFilter
+    ]
     filterset_fields = ['ingredient__name', 'quantity_in_stock']
-    ordering_fields = ['quantity_in_stock']
+    ordering_fields = ['quantity_in_stock', 'ingredient__name']
     search_fields = ['ingredient__name']
 
 
 class PurchaseOrderViewSet(viewsets.ModelViewSet):
-    queryset = PurchaseOrder.objects.all()
+    queryset = PurchaseOrder.objects.select_related(
+        'ingredient'
+    ).order_by('-created_at')
     serializer_class = PurchaseOrderSerializer
 
 
 class InvoiceViewSet(viewsets.ModelViewSet):
-    queryset = Invoice.objects.all()
+    queryset = Invoice.objects.select_related(
+        'purchase_order__ingredient'
+    ).order_by('-received_at')
     serializer_class = InvoiceSerializer
 
 
 class ChequeViewSet(viewsets.ModelViewSet):
-    queryset = Cheque.objects.all()
+    queryset = Cheque.objects.select_related(
+        'invoice__purchase_order__ingredient'
+    ).order_by('-issued_at')
     serializer_class = ChequeSerializer
+
+
 @api_view(['GET'])
 def menu_card(request):
-    menu_items = MenuItem.objects.prefetch_related('itemingredient_set__ingredient').all()
-    data = []
+    menu_items = MenuItem.objects.prefetch_related(
+        'itemingredient_set__ingredient'
+    ).filter(available=True)
 
+    data = []
     for item in menu_items:
         ingredients = [
             {
-                "name": ii.ingredient.name,
-                "quantity_required": ii.quantity_required,
+                'name': item_ingredient.ingredient.name,
+                'quantity_required': item_ingredient.quantity_required,
+                'unit': item_ingredient.ingredient.unit,
             }
-            for ii in item.itemingredient_set.all()
+            for item_ingredient in item.itemingredient_set.all()
         ]
 
         data.append({
-            "name": item.name,
-            "price": item.price,
-            "ingredients": ingredients
+            'id': item.id,
+            'name': item.name,
+            'price': item.price,
+            'ingredients': ingredients,
         })
 
     return Response(data)
