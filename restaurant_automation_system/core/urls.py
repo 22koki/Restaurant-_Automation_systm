@@ -31,6 +31,7 @@ urlpatterns = [
     path('api/auth/login/', views.staff_login),
     path('api/auth/logout/', views.staff_logout),
     path('api/auth/me/', views.staff_me),
+    path('api/staff-directory/', views.staff_directory),
     path('api/menu-card/', views.menu_card),
     path('api/setup/', views.initial_setup),
 ]
