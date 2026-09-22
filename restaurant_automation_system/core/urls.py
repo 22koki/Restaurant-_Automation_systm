@@ -34,4 +34,6 @@ urlpatterns = [
     path('api/staff-directory/', views.staff_directory),
     path('api/menu-card/', views.menu_card),
     path('api/setup/', views.initial_setup),
+    path('api/payments/mpesa/stk/', views.mpesa_stk_push),
+    path('api/payments/mpesa/callback/', views.mpesa_callback),
 ]
