@@ -7,12 +7,14 @@ from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
 from django.db import transaction
 from django.contrib.auth import authenticate
+from django.utils import timezone
 
 from .permissions import ActiveStaffPermission, OwnerManagerPermission, CashierManagerPermission, ServicePermission, KitchenPermission, InventoryPermission, staff_role
 from .models import (
     MenuItem, Order, OrderDetail, Ingredient, ItemIngredient,
     Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation, Payment, StaffProfile
 )
+from .mpesa import MpesaError, stk_push
 from .serializers import (
     MenuItemSerializer, OrderSerializer, OrderDetailSerializer,
     IngredientSerializer, ItemIngredientSerializer, InventorySerializer,
@@ -156,6 +158,120 @@ def staff_directory(request):
         }
         for profile in profiles
     ])
+
+
+@api_view(['POST'])
+@permission_classes([CashierManagerPermission])
+@transaction.atomic
+def mpesa_stk_push(request):
+    order_id = request.data.get('order')
+    amount = request.data.get('amount')
+    phone = request.data.get('phone_number', '')
+
+    try:
+        order = Order.objects.select_for_update().get(pk=order_id)
+    except Order.DoesNotExist:
+        return Response({'detail': 'Order not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        amount = float(amount)
+    except (TypeError, ValueError):
+        return Response({'amount': 'Enter a valid payment amount.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    paid_total = sum(p.amount for p in order.payments.filter(status='paid'))
+    outstanding = float(order.total - paid_total)
+    if amount <= 0 or amount > outstanding:
+        return Response(
+            {'amount': f'Enter an amount between 1 and {outstanding:.2f}.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    payment = Payment.objects.create(
+        order=order,
+        method='mpesa',
+        amount=amount,
+        status='pending',
+        phone_number=phone,
+    )
+
+    try:
+        response = stk_push(
+            phone=phone,
+            amount=amount,
+            account_reference=f'Order{order.id}',
+            description=f'Savour Order {order.id}',
+        )
+    except MpesaError as exc:
+        payment.status = 'failed'
+        payment.save(update_fields=['status'])
+        return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+    checkout_id = response.get('CheckoutRequestID', '')
+    merchant_id = response.get('MerchantRequestID', '')
+    response_code = str(response.get('ResponseCode', ''))
+
+    if response_code != '0' or not checkout_id:
+        payment.status = 'failed'
+        payment.reference = checkout_id or merchant_id
+        payment.save(update_fields=['status', 'reference'])
+        return Response(
+            {'detail': response.get('ResponseDescription') or 'Safaricom rejected the STK request.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    payment.reference = checkout_id
+    payment.save(update_fields=['reference'])
+    return Response({
+        'payment_id': payment.id,
+        'status': payment.status,
+        'checkout_request_id': checkout_id,
+        'merchant_request_id': merchant_id,
+        'customer_message': response.get('CustomerMessage', 'Check your phone to complete payment.'),
+    }, status=status.HTTP_202_ACCEPTED)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@transaction.atomic
+def mpesa_callback(request):
+    callback = request.data.get('Body', {}).get('stkCallback', {})
+    checkout_id = callback.get('CheckoutRequestID', '')
+    result_code = callback.get('ResultCode')
+
+    try:
+        payment = Payment.objects.select_for_update().select_related('order', 'order__table').get(
+            method='mpesa',
+            reference=checkout_id,
+            status='pending',
+        )
+    except Payment.DoesNotExist:
+        return Response({'ResultCode': 0, 'ResultDesc': 'Accepted'})
+
+    if result_code == 0:
+        metadata = callback.get('CallbackMetadata', {}).get('Item', [])
+        values = {item.get('Name'): item.get('Value') for item in metadata}
+        receipt = str(values.get('MpesaReceiptNumber', checkout_id))
+        payment.status = 'paid'
+        payment.reference = receipt
+        payment.paid_at = timezone.now()
+        payment.save(update_fields=['status', 'reference', 'paid_at'])
+
+        order = payment.order
+        paid_total = sum(p.amount for p in order.payments.filter(status='paid'))
+        if paid_total >= order.total:
+            order.status = 'completed'
+            order.save(update_fields=['status', 'updated_at'])
+            if order.table:
+                order.table.status = 'cleaning'
+                order.table.save(update_fields=['status'])
+        else:
+            order.status = 'awaiting_payment'
+            order.save(update_fields=['status', 'updated_at'])
+    else:
+        payment.status = 'failed'
+        payment.save(update_fields=['status'])
+
+    return Response({'ResultCode': 0, 'ResultDesc': 'Accepted'})
 
 
 class PaymentViewSet(viewsets.ModelViewSet):
