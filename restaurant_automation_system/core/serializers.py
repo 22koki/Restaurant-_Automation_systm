@@ -302,6 +302,13 @@ class ChequeSerializer(serializers.ModelSerializer):
 class PaymentSerializer(serializers.ModelSerializer):
     order_total = serializers.ReadOnlyField(source='order.total')
     order_table = serializers.ReadOnlyField(source='order.table.number')
+    cashier_name = serializers.SerializerMethodField()
+
+    def get_cashier_name(self, obj):
+        cashier = getattr(obj.order, 'cashier', None)
+        if not cashier:
+            return ''
+        return cashier.get_full_name().strip() or cashier.username
 
     class Meta:
         model = Payment
