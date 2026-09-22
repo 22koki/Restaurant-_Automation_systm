@@ -186,6 +186,17 @@ def mpesa_stk_push(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+    existing_pending = order.payments.filter(
+        method='mpesa',
+        status='pending'
+    ).order_by('-created_at').first()
+    if existing_pending:
+        return Response({
+            'detail': 'An M-Pesa request is already pending for this order.',
+            'payment_id': existing_pending.id,
+            'status': existing_pending.status,
+        }, status=status.HTTP_409_CONFLICT)
+
     payment = Payment.objects.create(
         order=order,
         method='mpesa',
@@ -269,7 +280,8 @@ def mpesa_callback(request):
             order.save(update_fields=['status', 'updated_at'])
     else:
         payment.status = 'failed'
-        payment.save(update_fields=['status'])
+        payment.reference = str(callback.get('ResultDesc', 'M-Pesa payment failed.'))[:120]
+        payment.save(update_fields=['status', 'reference'])
 
     return Response({'ResultCode': 0, 'ResultDesc': 'Accepted'})
 
