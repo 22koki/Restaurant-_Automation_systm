@@ -288,8 +288,12 @@ def mpesa_callback(request):
 
 class PaymentViewSet(viewsets.ModelViewSet):
     permission_classes = [CashierManagerPermission]
-    queryset = Payment.objects.select_related('order', 'order__table').order_by('-created_at')
+    queryset = Payment.objects.select_related('order', 'order__table', 'order__cashier').order_by('-created_at')
     serializer_class = PaymentSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['method', 'status', 'order']
+    search_fields = ['reference', 'phone_number', 'order__id', 'order__table__number']
+    ordering_fields = ['created_at', 'amount', 'paid_at']
 
 
 class RestaurantTableViewSet(viewsets.ModelViewSet):
