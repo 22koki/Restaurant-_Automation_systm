@@ -70,6 +70,7 @@ class RestaurantTable(models.Model):
         default='available'
     )
     active = models.BooleanField(default=True)
+    status_changed_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f'Table {self.number}'
