@@ -230,14 +230,11 @@ class OrderSerializer(serializers.ModelSerializer):
 
 
 class IngredientSerializer(serializers.ModelSerializer):
-    threshold = serializers.SerializerMethodField()
+    threshold = serializers.ReadOnlyField(source='reorder_threshold')
 
     class Meta:
         model = Ingredient
-        fields = ['id', 'name', 'unit', 'threshold']
-
-    def get_threshold(self, obj):
-        return obj.calculate_threshold()
+        fields = ['id', 'name', 'unit', 'reorder_threshold', 'threshold']
 
 
 class ItemIngredientSerializer(serializers.ModelSerializer):
@@ -268,10 +265,18 @@ class InventorySerializer(serializers.ModelSerializer):
 
 class PurchaseOrderSerializer(serializers.ModelSerializer):
     ingredient_name = serializers.ReadOnlyField(source='ingredient.name')
+    ingredient_unit = serializers.ReadOnlyField(source='ingredient.unit')
 
     class Meta:
         model = PurchaseOrder
         fields = '__all__'
+
+    def validate_status(self, value):
+        normalized = str(value).strip().lower()
+        mapping = {'pending': 'Pending', 'received': 'Received'}
+        if normalized not in mapping:
+            raise serializers.ValidationError('Use pending or received.')
+        return mapping[normalized]
 
 
 class InvoiceSerializer(serializers.ModelSerializer):
@@ -375,7 +380,7 @@ class PaymentSerializer(serializers.ModelSerializer):
             order.save(update_fields=['status', 'updated_at'])
             if order.table:
                 order.table.status = 'cleaning'
-                order.table.save(update_fields=['status'])
+                order.table.save(update_fields=['status', 'status_changed_at'])
         else:
             order.status = 'awaiting_payment'
             order.save(update_fields=['status', 'updated_at'])
