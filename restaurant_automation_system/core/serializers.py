@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from .models import (
     MenuItem, Order, OrderDetail, Ingredient, ItemIngredient,
-    Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation, Payment, StaffProfile
+    Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation, Payment, StaffProfile, CashierShift
 )
 
 
@@ -299,10 +299,31 @@ class ChequeSerializer(serializers.ModelSerializer):
         read_only_fields = ['issued_at']
 
 
+class CashierShiftSerializer(serializers.ModelSerializer):
+    cashier_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CashierShift
+        fields = '__all__'
+        read_only_fields = [
+            'cashier', 'expected_cash', 'variance', 'status',
+            'opened_at', 'closed_at'
+        ]
+
+    def get_cashier_name(self, obj):
+        return obj.cashier.get_full_name().strip() or obj.cashier.username
+
+
 class PaymentSerializer(serializers.ModelSerializer):
     order_total = serializers.ReadOnlyField(source='order.total')
     order_table = serializers.ReadOnlyField(source='order.table.number')
     cashier_name = serializers.SerializerMethodField()
+    processed_by_name = serializers.SerializerMethodField()
+
+    def get_processed_by_name(self, obj):
+        if not obj.processed_by:
+            return ''
+        return obj.processed_by.get_full_name().strip() or obj.processed_by.username
 
     def get_cashier_name(self, obj):
         cashier = getattr(obj.order, 'cashier', None)
@@ -341,6 +362,10 @@ class PaymentSerializer(serializers.ModelSerializer):
         elif method in ('cash', 'card'):
             validated_data['status'] = 'paid'
             validated_data['paid_at'] = timezone.now()
+
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            validated_data['processed_by'] = request.user
 
         payment = Payment.objects.create(**validated_data)
 
