@@ -276,7 +276,7 @@ def mpesa_callback(request):
             order.save(update_fields=['status', 'updated_at'])
             if order.table:
                 order.table.status = 'cleaning'
-                order.table.save(update_fields=['status'])
+                order.table.save(update_fields=['status', 'status_changed_at'])
         else:
             order.status = 'awaiting_payment'
             order.save(update_fields=['status', 'updated_at'])
@@ -375,6 +375,13 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
 class RestaurantTableViewSet(viewsets.ModelViewSet):
     queryset = RestaurantTable.objects.all().order_by('number')
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        cutoff = timezone.now() - timezone.timedelta(minutes=1)
+        stale = qs.filter(status='cleaning', status_changed_at__lte=cutoff)
+        stale.update(status='available', status_changed_at=timezone.now())
+        return qs
     serializer_class = RestaurantTableSerializer
 
     def get_permissions(self):
@@ -387,6 +394,28 @@ class ReservationViewSet(viewsets.ModelViewSet):
     permission_classes = [ServicePermission]
     queryset = Reservation.objects.select_related('table').order_by('-reservation_at')
     serializer_class = ReservationSerializer
+
+    def perform_create(self, serializer):
+        reservation = serializer.save()
+        if reservation.table and reservation.status in ('pending', 'confirmed'):
+            if reservation.table.status == 'available':
+                reservation.table.status = 'reserved'
+                reservation.table.save(update_fields=['status', 'status_changed_at'])
+
+    def perform_update(self, serializer):
+        reservation = serializer.save()
+        table = reservation.table
+        if not table:
+            return
+        if reservation.status == 'seated':
+            table.status = 'occupied'
+        elif reservation.status in ('pending', 'confirmed') and table.status == 'available':
+            table.status = 'reserved'
+        elif reservation.status in ('cancelled', 'completed') and table.status == 'reserved':
+            table.status = 'available'
+        else:
+            return
+        table.save(update_fields=['status', 'status_changed_at'])
 
 
 class MenuItemViewSet(viewsets.ModelViewSet):
@@ -442,6 +471,9 @@ class OrderDetailViewSet(viewsets.ModelViewSet):
                 order.table.save(update_fields=['status'])
         elif active_details and all(item.status == 'ready' for item in active_details):
             order.status = 'ready'
+            if order.table:
+                order.table.status = 'preparing'
+                order.table.save(update_fields=['status', 'status_changed_at'])
         elif active_details and all(item.status == 'served' for item in active_details):
             order.status = 'awaiting_payment'
             if order.table:
