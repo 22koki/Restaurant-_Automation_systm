@@ -107,9 +107,9 @@ class OrderSerializer(serializers.ModelSerializer):
             'salesclerk_roles', 'waiter', 'waiter_name', 'cashier', 'cashier_name',
             'table', 'table_number', 'order_type', 'status',
             'customer_name', 'customer_phone', 'notes', 'created_at',
-            'updated_at', 'total', 'order_details', 'details'
+            'updated_at', 'subtotal', 'discount_amount', 'service_charge_amount', 'tax_amount', 'tip_amount', 'adjustment_note', 'total', 'order_details', 'details'
         ]
-        read_only_fields = ['salesclerk', 'created_at', 'updated_at', 'total']
+        read_only_fields = ['salesclerk', 'created_at', 'updated_at', 'subtotal', 'discount_amount', 'service_charge_amount', 'tax_amount', 'tip_amount', 'adjustment_note', 'total']
 
     def get_salesclerk_name(self, obj):
         if not obj.salesclerk:
@@ -219,8 +219,9 @@ class OrderSerializer(serializers.ModelSerializer):
 
             total += subtotal
 
+        order.subtotal = total
         order.total = total
-        order.save(update_fields=['total'])
+        order.save(update_fields=['subtotal', 'total'])
 
         if order.table:
             order.table.status = 'ordering'
