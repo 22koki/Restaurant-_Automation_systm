@@ -1,0 +1,25 @@
+import React,{useEffect,useMemo,useState}from'react';import{api}from'../services/api';import'./FinancialDashboard.css';
+
+export default function FinancialDashboard(){
+ const[payments,setPayments]=useState([]),[orders,setOrders]=useState([]),[shifts,setShifts]=useState([]),[error,setError]=useState('');
+ useEffect(()=>{Promise.all([api.get('payments/'),api.get('orders/'),api.get('cashier-shifts/')]).then(([p,o,s])=>{setPayments(p.data);setOrders(o.data);setShifts(s.data)}).catch(()=>setError('Could not load financial summary.'))},[]);
+ const today=new Date().toISOString().slice(0,10);
+ const dayPayments=useMemo(()=>payments.filter(p=>(p.paid_at||p.created_at||'').slice(0,10)===today),[payments,today]);
+ const paid=dayPayments.filter(p=>p.status==='paid');
+ const totals=useMemo(()=>({cash:0,card:0,mpesa:0}),[]);
+ paid.forEach(p=>{totals[p.method]=(totals[p.method]||0)+Number(p.amount)});
+ const sales=paid.reduce((n,p)=>n+Number(p.amount),0);
+ const completed=orders.filter(o=>o.status==='completed'&&(o.updated_at||o.created_at).slice(0,10)===today);
+ const avgBill=completed.length?sales/completed.length:0;
+ const dayShifts=shifts.filter(s=>s.opened_at.slice(0,10)===today);
+ const variance=dayShifts.filter(s=>s.status==='closed').reduce((n,s)=>n+Number(s.variance||0),0);
+ const refunds=dayPayments.filter(p=>p.status==='refunded').reduce((n,p)=>n+Number(p.amount),0);
+ const openShifts=dayShifts.filter(s=>s.status==='open').length;
+ return <main className="finance-shell"><header><div><span>Owner finance</span><h1>End-of-day dashboard</h1><p>Today’s sales, payment mix, cashier variances and close status in one view.</p></div><div className="finance-date">{new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</div></header>
+ {error&&<div className="finance-error">{error}</div>}
+ <section className="finance-kpis"><article><small>Net paid sales</small><strong>KSh {sales.toLocaleString()}</strong><span>{paid.length} paid transactions</span></article><article><small>Completed orders</small><strong>{completed.length}</strong><span>Avg bill KSh {avgBill.toLocaleString(undefined,{maximumFractionDigits:0})}</span></article><article><small>Refunded</small><strong>KSh {refunds.toLocaleString()}</strong><span>{dayPayments.filter(p=>p.status==='refunded').length} refunds</span></article><article><small>Till variance</small><strong className={variance===0?'balanced':variance<0?'short':'over'}>{variance>0?'+':''}KSh {variance.toLocaleString()}</strong><span>{openShifts} shift(s) still open</span></article></section>
+ <section className="finance-grid"><article className="finance-card"><div className="card-title"><span>Payment mix</span><h2>How guests paid</h2></div>{[['M-Pesa','mpesa'],['Cash','cash'],['Card','card']].map(([label,key])=>{const amount=totals[key]||0;const pct=sales?Math.round(amount/sales*100):0;return <div className="mix-row" key={key}><div><strong>{label}</strong><span>{pct}% of paid sales</span></div><div><b>KSh {amount.toLocaleString()}</b><div className="bar"><i style={{width:pct+'%'}}/></div></div></div>})}</article>
+ <article className="finance-card"><div className="card-title"><span>Cashier control</span><h2>Today’s shifts</h2></div>{dayShifts.map(s=><div className="shift-summary" key={s.id}><div><strong>{s.cashier_name}</strong><span>{s.status==='open'?'Open since '+new Date(s.opened_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'Closed '+new Date(s.closed_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span></div><div><small>Expected</small><b>KSh {Number(s.expected_cash||0).toLocaleString()}</b></div><div><small>Counted</small><b>{s.counted_cash==null?'—':'KSh '+Number(s.counted_cash).toLocaleString()}</b></div><div><small>Variance</small><b className={Number(s.variance)===0?'balanced':Number(s.variance)<0?'short':'over'}>{Number(s.variance)>0?'+':''}KSh {Number(s.variance||0).toLocaleString()}</b></div></div>)}{!dayShifts.length&&<p>No cashier shifts opened today.</p>}</article></section>
+ <section className="finance-card"><div className="card-title"><span>Close checklist</span><h2>Before ending the day</h2></div><div className="close-checks"><div className={openShifts?'warn':'ok'}><i className={'bi '+(openShifts?'bi-exclamation-triangle':'bi-check-circle')}/><span>{openShifts?openShifts+' cashier shift(s) still open':'All cashier shifts are closed'}</span></div><div className={dayPayments.some(p=>p.status==='pending')?'warn':'ok'}><i className={'bi '+(dayPayments.some(p=>p.status==='pending')?'bi-hourglass-split':'bi-check-circle')}/><span>{dayPayments.some(p=>p.status==='pending')?'Pending payments still need attention':'No pending payments'}</span></div><div className={variance===0?'ok':'warn'}><i className={'bi '+(variance===0?'bi-check-circle':'bi-cash-stack')}/><span>{variance===0?'Cash drawers balanced':'Review total till variance of KSh '+variance.toLocaleString()}</span></div></div></section>
+ </main>
+}
