@@ -223,8 +223,8 @@ class OrderSerializer(serializers.ModelSerializer):
         order.save(update_fields=['total'])
 
         if order.table:
-            order.table.status = 'preparing'
-            order.table.save(update_fields=['status'])
+            order.table.status = 'ordering'
+            order.table.save(update_fields=['status', 'status_changed_at'])
 
         return order
 
