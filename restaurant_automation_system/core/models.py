@@ -331,6 +331,29 @@ class CashBalance(models.Model):
         return f'Cash Balance: {self.balance}'
 
 
+class CashierShift(models.Model):
+    STATUS_CHOICES = [
+        ('open', 'Open'),
+        ('closed', 'Closed'),
+    ]
+
+    cashier = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name='cashier_shifts'
+    )
+    opening_float = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    counted_cash = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    expected_cash = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    variance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='open')
+    opened_at = models.DateTimeField(auto_now_add=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f'{self.cashier.username} shift #{self.id} - {self.status}'
+
+
 class Payment(models.Model):
     METHOD_CHOICES = [
         ('mpesa', 'M-Pesa'),
@@ -360,6 +383,13 @@ class Payment(models.Model):
     phone_number = models.CharField(max_length=40, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(null=True, blank=True)
+    processed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='processed_payments'
+    )
 
     def __str__(self):
         return f'Payment #{self.id} for Order #{self.order_id}'
