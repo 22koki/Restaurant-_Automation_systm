@@ -364,6 +364,27 @@ class CashierShiftViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class PaymentViewSet(viewsets.ModelViewSet):
+    @action(detail=True, methods=['post'], permission_classes=[OwnerManagerPermission])
+    @transaction.atomic
+    def refund(self, request, pk=None):
+        payment = self.get_object()
+        if payment.status != 'paid':
+            return Response({'detail': 'Only a paid transaction can be refunded.'}, status=status.HTTP_409_CONFLICT)
+        reason = str(request.data.get('reason', '')).strip()
+        if not reason:
+            return Response({'reason': 'A refund reason is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        payment.status = 'refunded'
+        payment.refund_reason = reason[:255]
+        payment.refunded_at = timezone.now()
+        payment.refunded_by = request.user
+        payment.save(update_fields=['status','refund_reason','refunded_at','refunded_by'])
+        order = payment.order
+        paid_total = sum(p.amount for p in order.payments.filter(status='paid'))
+        if paid_total < order.total:
+            order.status = 'awaiting_payment'
+            order.save(update_fields=['status','updated_at'])
+        return Response(PaymentSerializer(payment).data)
+
     permission_classes = [CashierManagerPermission]
     queryset = Payment.objects.select_related('order', 'order__table', 'order__cashier').order_by('-created_at')
     serializer_class = PaymentSerializer
@@ -438,6 +459,53 @@ class OrderViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             return [AllowAny()]
         return [ActiveStaffPermission()]
+
+    @action(detail=True, methods=['post'], permission_classes=[OwnerManagerPermission])
+    @transaction.atomic
+    def adjustments(self, request, pk=None):
+        from decimal import Decimal, InvalidOperation
+        order = self.get_object()
+        if order.payments.filter(status='paid').exists():
+            return Response({'detail': 'Adjustments cannot be changed after payment. Refund or void the transaction instead.'}, status=status.HTTP_409_CONFLICT)
+        try:
+            discount = Decimal(str(request.data.get('discount_amount', 0) or 0))
+            service = Decimal(str(request.data.get('service_charge_amount', 0) or 0))
+            tax = Decimal(str(request.data.get('tax_amount', 0) or 0))
+            tip = Decimal(str(request.data.get('tip_amount', 0) or 0))
+        except (InvalidOperation, TypeError):
+            return Response({'detail': 'Enter valid adjustment amounts.'}, status=status.HTTP_400_BAD_REQUEST)
+        if any(x < 0 for x in (discount, service, tax, tip)):
+            return Response({'detail': 'Adjustment amounts cannot be negative.'}, status=status.HTTP_400_BAD_REQUEST)
+        subtotal = sum((d.subtotal for d in order.details.exclude(status='cancelled')), Decimal('0'))
+        if discount > subtotal:
+            return Response({'detail': 'Discount cannot exceed the order subtotal.'}, status=status.HTTP_400_BAD_REQUEST)
+        order.subtotal = subtotal
+        order.discount_amount = discount
+        order.service_charge_amount = service
+        order.tax_amount = tax
+        order.tip_amount = tip
+        order.adjustment_note = str(request.data.get('adjustment_note', ''))[:255]
+        order.total = subtotal - discount + service + tax + tip
+        order.save(update_fields=['subtotal','discount_amount','service_charge_amount','tax_amount','tip_amount','adjustment_note','total','updated_at'])
+        return Response(OrderSerializer(order, context={'request': request}).data)
+
+    @action(detail=True, methods=['post'], permission_classes=[OwnerManagerPermission])
+    @transaction.atomic
+    def void(self, request, pk=None):
+        order = self.get_object()
+        if order.payments.filter(status='paid').exists():
+            return Response({'detail': 'A paid order cannot be voided. Refund its payment instead.'}, status=status.HTTP_409_CONFLICT)
+        reason = str(request.data.get('reason', '')).strip()
+        if not reason:
+            return Response({'reason': 'A void reason is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        order.status = 'cancelled'
+        order.notes = (order.notes + '\nVOID: ' + reason + ' · ' + request.user.username).strip()
+        order.save(update_fields=['status','notes','updated_at'])
+        order.details.exclude(status='cancelled').update(status='cancelled')
+        if order.table:
+            order.table.status = 'cleaning'
+            order.table.save(update_fields=['status','status_changed_at'])
+        return Response(OrderSerializer(order, context={'request': request}).data)
 
     @action(detail=True, methods=['get'], permission_classes=[CashierManagerPermission])
     def receipt(self, request, pk=None):
