@@ -49,12 +49,60 @@ class StaffProfileSerializer(serializers.ModelSerializer):
 
 class MenuItemSerializer(serializers.ModelSerializer):
     image_display_url = serializers.SerializerMethodField()
+    recipe = serializers.SerializerMethodField()
+    food_cost = serializers.SerializerMethodField()
+    gross_profit = serializers.SerializerMethodField()
+    food_cost_percentage = serializers.SerializerMethodField()
+    gross_margin_percentage = serializers.SerializerMethodField()
 
     def get_image_display_url(self, obj):
         request = self.context.get('request')
         if obj.image:
             return request.build_absolute_uri(obj.image.url) if request else obj.image.url
         return obj.image_url
+
+    def _costing(self, obj):
+        from decimal import Decimal
+        lines = []
+        total = Decimal('0')
+        for recipe_line in obj.itemingredient_set.all():
+            quantity = Decimal(str(recipe_line.quantity_required))
+            unit_cost = recipe_line.ingredient.cost_per_unit or Decimal('0')
+            line_cost = quantity * unit_cost
+            total += line_cost
+            lines.append({
+                'id': recipe_line.id,
+                'ingredient': recipe_line.ingredient_id,
+                'ingredient_name': recipe_line.ingredient.name,
+                'unit': recipe_line.ingredient.unit,
+                'quantity_required': recipe_line.quantity_required,
+                'cost_per_unit': unit_cost,
+                'line_cost': line_cost.quantize(Decimal('0.01')),
+            })
+        price = obj.price or Decimal('0')
+        gross_profit = price - total
+        food_pct = (total / price * Decimal('100')) if price else Decimal('0')
+        margin_pct = (gross_profit / price * Decimal('100')) if price else Decimal('0')
+        return lines, total, gross_profit, food_pct, margin_pct
+
+    def get_recipe(self, obj):
+        return self._costing(obj)[0]
+
+    def get_food_cost(self, obj):
+        from decimal import Decimal
+        return self._costing(obj)[1].quantize(Decimal('0.01'))
+
+    def get_gross_profit(self, obj):
+        from decimal import Decimal
+        return self._costing(obj)[2].quantize(Decimal('0.01'))
+
+    def get_food_cost_percentage(self, obj):
+        from decimal import Decimal
+        return self._costing(obj)[3].quantize(Decimal('0.01'))
+
+    def get_gross_margin_percentage(self, obj):
+        from decimal import Decimal
+        return self._costing(obj)[4].quantize(Decimal('0.01'))
 
     class Meta:
         model = MenuItem
