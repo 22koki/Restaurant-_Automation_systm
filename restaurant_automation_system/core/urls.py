@@ -6,13 +6,14 @@ from .views import (
     MenuItemViewSet, OrderViewSet, OrderDetailViewSet,
     IngredientViewSet, ItemIngredientViewSet, InventoryViewSet,
     PurchaseOrderViewSet, InvoiceViewSet, ChequeViewSet,
-    RestaurantTableViewSet, ReservationViewSet, PaymentViewSet, StaffProfileViewSet, CashierShiftViewSet
+    RestaurantTableViewSet, ReservationViewSet, PaymentViewSet, StaffProfileViewSet, CashierShiftViewSet, AuditLogViewSet
 )
 
 router = DefaultRouter()
 router.register(r'staff', StaffProfileViewSet)
 router.register(r'payments', PaymentViewSet)
 router.register(r'cashier-shifts', CashierShiftViewSet)
+router.register(r'audit-logs', AuditLogViewSet)
 router.register(r'tables', RestaurantTableViewSet)
 router.register(r'reservations', ReservationViewSet)
 router.register(r'menu-items', MenuItemViewSet)
