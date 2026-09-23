@@ -400,3 +400,41 @@ class Payment(models.Model):
 
     def __str__(self):
         return f'Payment #{self.id} for Order #{self.order_id}'
+
+
+class AuditLog(models.Model):
+    ACTION_CHOICES = [
+        ('adjustment', 'Adjustment'),
+        ('void', 'Void'),
+        ('refund', 'Refund'),
+    ]
+
+    action = models.CharField(max_length=30, choices=ACTION_CHOICES)
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='restaurant_audit_logs'
+    )
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='audit_logs'
+    )
+    payment = models.ForeignKey(
+        Payment,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='audit_logs'
+    )
+    amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    reason = models.CharField(max_length=255, blank=True)
+    details = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f'{self.action} by {self.actor or "system"}'
