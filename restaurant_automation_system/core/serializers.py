@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from .models import (
     MenuItem, Order, OrderDetail, Ingredient, ItemIngredient,
-    Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation, Payment, StaffProfile, CashierShift
+    Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation, Payment, StaffProfile, CashierShift, AuditLog
 )
 
 
@@ -387,3 +387,17 @@ class PaymentSerializer(serializers.ModelSerializer):
             order.save(update_fields=['status', 'updated_at'])
 
         return payment
+
+
+class AuditLogSerializer(serializers.ModelSerializer):
+    actor_name = serializers.SerializerMethodField()
+    table_number = serializers.ReadOnlyField(source='order.table.number')
+
+    class Meta:
+        model = AuditLog
+        fields = '__all__'
+
+    def get_actor_name(self, obj):
+        if not obj.actor:
+            return 'System'
+        return obj.actor.get_full_name().strip() or obj.actor.username
