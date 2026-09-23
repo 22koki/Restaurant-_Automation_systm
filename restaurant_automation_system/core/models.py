@@ -214,6 +214,7 @@ class Ingredient(models.Model):
     name = models.CharField(max_length=100)
     unit = models.CharField(max_length=20)
     reorder_threshold = models.FloatField(default=5.0)
+    cost_per_unit = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     def calculate_threshold(self):
         return self.reorder_threshold
@@ -438,3 +439,14 @@ class AuditLog(models.Model):
 
     def __str__(self):
         return f'{self.action} by {self.actor or "system"}'
+
+
+class Wastage(models.Model):
+    ingredient = models.ForeignKey(Ingredient, on_delete=models.PROTECT, related_name='wastage_records')
+    quantity = models.FloatField()
+    reason = models.CharField(max_length=255)
+    recorded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f'{self.ingredient.name} wastage - {self.quantity} {self.ingredient.unit}'
