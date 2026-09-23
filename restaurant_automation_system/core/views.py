@@ -13,14 +13,14 @@ from django.utils import timezone
 from .permissions import ActiveStaffPermission, OwnerManagerPermission, CashierManagerPermission, ServicePermission, KitchenPermission, InventoryPermission, staff_role
 from .models import (
     MenuItem, Order, OrderDetail, Ingredient, ItemIngredient,
-    Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation, Payment, StaffProfile, CashierShift, AuditLog
+    Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation, Payment, StaffProfile, CashierShift, AuditLog, Wastage
 )
 from .mpesa import MpesaError, stk_push
 from .serializers import (
     MenuItemSerializer, OrderSerializer, OrderDetailSerializer,
     IngredientSerializer, ItemIngredientSerializer, InventorySerializer,
     PurchaseOrderSerializer, InvoiceSerializer, ChequeSerializer,
-    RestaurantTableSerializer, ReservationSerializer, PaymentSerializer, StaffProfileSerializer, CashierShiftSerializer, AuditLogSerializer
+    RestaurantTableSerializer, ReservationSerializer, PaymentSerializer, StaffProfileSerializer, CashierShiftSerializer, AuditLogSerializer, WastageSerializer
 )
 
 
@@ -558,6 +558,25 @@ class IngredientViewSet(viewsets.ModelViewSet):
     permission_classes = [InventoryPermission]
     queryset = Ingredient.objects.all().order_by('name')
     serializer_class = IngredientSerializer
+
+
+class WastageViewSet(viewsets.ModelViewSet):
+    permission_classes = [InventoryPermission]
+    serializer_class = WastageSerializer
+    queryset = Wastage.objects.select_related('ingredient', 'recorded_by').order_by('-created_at')
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        ingredient = serializer.validated_data['ingredient']
+        quantity = float(serializer.validated_data['quantity'])
+        if quantity <= 0:
+            raise ValidationError({'quantity': 'Quantity must be greater than zero.'})
+        inventory = Inventory.objects.select_for_update().filter(ingredient=ingredient).first()
+        if not inventory or inventory.quantity_in_stock < quantity:
+            raise ValidationError({'quantity': 'Not enough stock to record this wastage.'})
+        inventory.quantity_in_stock -= quantity
+        inventory.save(update_fields=['quantity_in_stock'])
+        serializer.save(recorded_by=self.request.user)
 
 
 class ItemIngredientViewSet(viewsets.ModelViewSet):
