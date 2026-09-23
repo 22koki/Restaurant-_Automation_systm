@@ -13,14 +13,14 @@ from django.utils import timezone
 from .permissions import ActiveStaffPermission, OwnerManagerPermission, CashierManagerPermission, ServicePermission, KitchenPermission, InventoryPermission, staff_role
 from .models import (
     MenuItem, Order, OrderDetail, Ingredient, ItemIngredient,
-    Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation, Payment, StaffProfile, CashierShift
+    Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation, Payment, StaffProfile, CashierShift, AuditLog
 )
 from .mpesa import MpesaError, stk_push
 from .serializers import (
     MenuItemSerializer, OrderSerializer, OrderDetailSerializer,
     IngredientSerializer, ItemIngredientSerializer, InventorySerializer,
     PurchaseOrderSerializer, InvoiceSerializer, ChequeSerializer,
-    RestaurantTableSerializer, ReservationSerializer, PaymentSerializer, StaffProfileSerializer, CashierShiftSerializer
+    RestaurantTableSerializer, ReservationSerializer, PaymentSerializer, StaffProfileSerializer, CashierShiftSerializer, AuditLogSerializer
 )
 
 
@@ -378,6 +378,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
         payment.refunded_at = timezone.now()
         payment.refunded_by = request.user
         payment.save(update_fields=['status','refund_reason','refunded_at','refunded_by'])
+        AuditLog.objects.create(action='refund', actor=request.user, order=payment.order, payment=payment, amount=payment.amount, reason=reason, details={'method': payment.method, 'reference': payment.reference})
         order = payment.order
         paid_total = sum(p.amount for p in order.payments.filter(status='paid'))
         if paid_total < order.total:
@@ -487,6 +488,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         order.adjustment_note = str(request.data.get('adjustment_note', ''))[:255]
         order.total = subtotal - discount + service + tax + tip
         order.save(update_fields=['subtotal','discount_amount','service_charge_amount','tax_amount','tip_amount','adjustment_note','total','updated_at'])
+        AuditLog.objects.create(action='adjustment', actor=request.user, order=order, amount=discount, reason=order.adjustment_note, details={'subtotal': str(subtotal), 'discount': str(discount), 'service_charge': str(service), 'tax': str(tax), 'tip': str(tip), 'final_total': str(order.total)})
         return Response(OrderSerializer(order, context={'request': request}).data)
 
     @action(detail=True, methods=['post'], permission_classes=[OwnerManagerPermission])
@@ -502,6 +504,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         order.notes = (order.notes + '\nVOID: ' + reason + ' · ' + request.user.username).strip()
         order.save(update_fields=['status','notes','updated_at'])
         order.details.exclude(status='cancelled').update(status='cancelled')
+        AuditLog.objects.create(action='void', actor=request.user, order=order, amount=order.total, reason=reason)
         if order.table:
             order.table.status = 'cleaning'
             order.table.save(update_fields=['status','status_changed_at'])
@@ -674,3 +677,13 @@ def menu_card(request):
         })
 
     return Response(data)
+
+
+class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [OwnerManagerPermission]
+    serializer_class = AuditLogSerializer
+    queryset = AuditLog.objects.select_related('actor', 'order', 'order__table', 'payment').order_by('-created_at')
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['action', 'actor', 'order', 'payment']
+    search_fields = ['reason', 'actor__username', 'actor__first_name', 'actor__last_name', 'order__id']
+    ordering_fields = ['created_at', 'amount']
