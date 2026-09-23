@@ -6,20 +6,21 @@ from rest_framework.permissions import AllowAny
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
 from django.db import transaction
+from django.db.models import Sum
 from django.contrib.auth import authenticate
 from django.utils import timezone
 
 from .permissions import ActiveStaffPermission, OwnerManagerPermission, CashierManagerPermission, ServicePermission, KitchenPermission, InventoryPermission, staff_role
 from .models import (
     MenuItem, Order, OrderDetail, Ingredient, ItemIngredient,
-    Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation, Payment, StaffProfile
+    Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation, Payment, StaffProfile, CashierShift
 )
 from .mpesa import MpesaError, stk_push
 from .serializers import (
     MenuItemSerializer, OrderSerializer, OrderDetailSerializer,
     IngredientSerializer, ItemIngredientSerializer, InventorySerializer,
     PurchaseOrderSerializer, InvoiceSerializer, ChequeSerializer,
-    RestaurantTableSerializer, ReservationSerializer, PaymentSerializer, StaffProfileSerializer
+    RestaurantTableSerializer, ReservationSerializer, PaymentSerializer, StaffProfileSerializer, CashierShiftSerializer
 )
 
 
@@ -199,6 +200,7 @@ def mpesa_stk_push(request):
 
     payment = Payment.objects.create(
         order=order,
+        processed_by=request.user,
         method='mpesa',
         amount=amount,
         status='pending',
@@ -284,6 +286,81 @@ def mpesa_callback(request):
         payment.save(update_fields=['status', 'reference'])
 
     return Response({'ResultCode': 0, 'ResultDesc': 'Accepted'})
+
+
+class CashierShiftViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [CashierManagerPermission]
+    queryset = CashierShift.objects.select_related('cashier').order_by('-opened_at')
+    serializer_class = CashierShiftSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        role = staff_role(self.request.user)
+        if role == 'cashier':
+            return qs.filter(cashier=self.request.user)
+        return qs
+
+    def _summary(self, shift):
+        payments = Payment.objects.filter(
+            status='paid',
+            processed_by=shift.cashier,
+            paid_at__gte=shift.opened_at,
+        )
+        if shift.closed_at:
+            payments = payments.filter(paid_at__lte=shift.closed_at)
+        totals = {
+            method: payments.filter(method=method).aggregate(total=Sum('amount'))['total'] or 0
+            for method in ('cash', 'card', 'mpesa')
+        }
+        return totals
+
+    @action(detail=False, methods=['get'])
+    def current(self, request):
+        shift = self.get_queryset().filter(status='open').first()
+        if not shift:
+            return Response({'shift': None})
+        return Response({
+            'shift': CashierShiftSerializer(shift).data,
+            'totals': self._summary(shift),
+        })
+
+    @action(detail=False, methods=['post'])
+    @transaction.atomic
+    def open(self, request):
+        if CashierShift.objects.filter(cashier=request.user, status='open').exists():
+            return Response({'detail': 'You already have an open shift.'}, status=status.HTTP_409_CONFLICT)
+        try:
+            opening_float = float(request.data.get('opening_float', 0))
+        except (TypeError, ValueError):
+            return Response({'opening_float': 'Enter a valid opening float.'}, status=status.HTTP_400_BAD_REQUEST)
+        if opening_float < 0:
+            return Response({'opening_float': 'Opening float cannot be negative.'}, status=status.HTTP_400_BAD_REQUEST)
+        shift = CashierShift.objects.create(cashier=request.user, opening_float=opening_float)
+        return Response({'shift': CashierShiftSerializer(shift).data, 'totals': self._summary(shift)}, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'])
+    @transaction.atomic
+    def close(self, request, pk=None):
+        shift = self.get_object()
+        if shift.status == 'closed':
+            return Response({'detail': 'This shift is already closed.'}, status=status.HTTP_409_CONFLICT)
+        if shift.cashier_id != request.user.id and staff_role(request.user) not in ('owner', 'manager'):
+            return Response({'detail': 'You cannot close another cashier shift.'}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            counted_cash = float(request.data.get('counted_cash'))
+        except (TypeError, ValueError):
+            return Response({'counted_cash': 'Enter the counted cash.'}, status=status.HTTP_400_BAD_REQUEST)
+        if counted_cash < 0:
+            return Response({'counted_cash': 'Counted cash cannot be negative.'}, status=status.HTTP_400_BAD_REQUEST)
+        totals = self._summary(shift)
+        expected_cash = float(shift.opening_float) + float(totals['cash'])
+        shift.counted_cash = counted_cash
+        shift.expected_cash = expected_cash
+        shift.variance = counted_cash - expected_cash
+        shift.status = 'closed'
+        shift.closed_at = timezone.now()
+        shift.save(update_fields=['counted_cash', 'expected_cash', 'variance', 'status', 'closed_at'])
+        return Response({'shift': CashierShiftSerializer(shift).data, 'totals': totals})
 
 
 class PaymentViewSet(viewsets.ModelViewSet):
