@@ -207,19 +207,10 @@ class OrderDetail(models.Model):
 class Ingredient(models.Model):
     name = models.CharField(max_length=100)
     unit = models.CharField(max_length=20)
+    reorder_threshold = models.FloatField(default=5.0)
 
     def calculate_threshold(self):
-        from datetime import timedelta
-        from django.utils import timezone
-
-        three_days_ago = timezone.now() - timedelta(days=3)
-        usages = IngredientUsage.objects.filter(
-            ingredient=self,
-            used_at__gte=three_days_ago
-        )
-        total_used = sum(u.quantity_used for u in usages)
-        avg_per_day = total_used / 3 if total_used else 0
-        return avg_per_day * 2
+        return self.reorder_threshold
 
 
 class IngredientUsage(models.Model):
