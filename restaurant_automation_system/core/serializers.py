@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from .models import (
     MenuItem, Order, OrderDetail, Ingredient, ItemIngredient,
-    Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation, Payment, StaffProfile, CashierShift, AuditLog
+    Inventory, PurchaseOrder, Invoice, Cheque, RestaurantTable, Reservation, Payment, StaffProfile, CashierShift, AuditLog, Wastage
 )
 
 
@@ -235,7 +235,18 @@ class IngredientSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Ingredient
-        fields = ['id', 'name', 'unit', 'reorder_threshold', 'threshold']
+        fields = ['id', 'name', 'unit', 'reorder_threshold', 'threshold', 'cost_per_unit']
+
+
+class WastageSerializer(serializers.ModelSerializer):
+    ingredient_name = serializers.ReadOnlyField(source='ingredient.name')
+    ingredient_unit = serializers.ReadOnlyField(source='ingredient.unit')
+    recorded_by_name = serializers.ReadOnlyField(source='recorded_by.username')
+
+    class Meta:
+        model = Wastage
+        fields = '__all__'
+        read_only_fields = ['recorded_by']
 
 
 class ItemIngredientSerializer(serializers.ModelSerializer):
